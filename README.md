@@ -13,8 +13,8 @@ Both share the shield's single hardware SPI bus (separate chip-selects), and pin
 #include <ST7789.h>
 #include <XPT2046.h>
 
-ST7789  tft(D10, D7, D9);   // LCD_CS, LCD_DC, LCD_BL
-XPT2046 touch(D4, D3);      // TP_CS, TP_IRQ
+ST7789  tft(10, 7, 9);   // LCD_CS, LCD_DC, LCD_BL
+XPT2046 touch(4, 3);     // TP_CS, TP_IRQ
 
 void setup() {
   tft.begin();
@@ -44,7 +44,17 @@ Type#|Header file|Interface|Notes
 
 Copy (or `git clone`) this repository into your Arduino `libraries/` folder, then restart the Arduino IDE.
 
-This library targets the standard Arduino API (`pinMode`/`digitalWrite`/`SPI`) and has no board-specific dependencies. It was developed and tested against [mcx-arduino-core](https://github.com/teddokano/mcx-arduino-core) (NXP FRDM-MCX boards) but should build against any Arduino-compatible core.
+This library targets the standard Arduino API (`pinMode`/`digitalWrite`/`SPI`) and has no board-specific dependencies.
+
+> **Note:** pass pin numbers as plain integers (`10, 7, 9, 4, 3`), not `D10`/`D7`/... macros -- those only exist on some 32-bit cores and aren't defined by the classic AVR core real UNO R3 boards use. The `TouchPaint` example already does this.
+
+### Build status
+
+Board|Core|Status
+---|---|---
+FRDM-MCXA153|[mcx-arduino-core](https://github.com/teddokano/mcx-arduino-core)|Builds
+UNO R4 Minima|`arduino:renesas_uno`|Builds
+UNO R3|`arduino:avr`|Failed to build before the `D`-macro fix above; not yet re-verified
 
 ## What's inside?
 
