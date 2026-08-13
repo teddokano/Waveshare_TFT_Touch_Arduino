@@ -64,6 +64,8 @@ Sketch|Feature
 ---|---
 `TouchPaint`|Draws the red/green/blue/grey corner test pattern (checks LCD orientation and RGB order at a glance), then a simple touch-paint loop that also prints raw + mapped touch coordinates to Serial
 `SDBitmapViewer`|Lists 24-bit uncompressed BMP files on the shield's onboard microSD slot and draws them on the LCD; touch anywhere to show the next image. Needs the standard `SD` library (bundled with the Arduino IDE)
+`GraphicsPrimitivesDemo`|Exercises every drawing primitive (fillRect/drawRect/lines/circles) and cycles through all four `setRotation()` orientations every few seconds -- a quick bring-up/visual-regression check, LCD only
+`TouchCalibration`|Guided wizard: touch four on-screen crosshairs and it prints a ready-to-paste `setCalibration()` call, auto-detecting axis swap/inversion instead of TouchPaint's hardcoded guesses
 
 After installing the library: `File` -> `Examples` -> `Waveshare_TFT_Touch` -> pick a sketch
 
@@ -85,7 +87,7 @@ There is no LCD reset pin exposed on the header; `ST7789::begin()` initializes t
 
 ## Touch calibration
 
-`XPT2046::setCalibration()` controls how raw 12-bit ADC counts map to screen pixels. The defaults (`0..4095` on both axes, no swap/invert) are **uncalibrated** -- run the `TouchPaint` example, watch the `raw=(...)` values printed to Serial while touching known points on your panel, and adjust `setCalibration()` accordingly.
+`XPT2046::setCalibration()` controls how raw 12-bit ADC counts map to screen pixels. The defaults (`0..4095` on both axes, no swap/invert) are **uncalibrated** -- run the `TouchCalibration` example and it prints a ready-to-paste `setCalibration()` call for your panel. (`TouchPaint`'s `raw=(...)` Serial printout also works for calibrating by hand, if you'd rather.)
 
 ## Acknowledgements
 
