@@ -1,0 +1,44 @@
+##########
+# classes
+##########
+
+ST7789	KEYWORD1
+XPT2046	KEYWORD1
+
+##########
+# methods and functions
+##########
+
+begin	KEYWORD2
+setRotation	KEYWORD2
+setBacklight	KEYWORD2
+width	KEYWORD2
+height	KEYWORD2
+fillScreen	KEYWORD2
+fillRect	KEYWORD2
+drawPixel	KEYWORD2
+drawFastHLine	KEYWORD2
+drawFastVLine	KEYWORD2
+drawRect	KEYWORD2
+drawLine	KEYWORD2
+drawCircle	KEYWORD2
+fillCircle	KEYWORD2
+touched	KEYWORD2
+getRaw	KEYWORD2
+setCalibration	KEYWORD2
+getPoint	KEYWORD2
+rgb565	KEYWORD2
+
+##########
+# constants
+##########
+
+ST7789_BLACK	LITERAL1
+ST7789_WHITE	LITERAL1
+ST7789_RED	LITERAL1
+ST7789_GREEN	LITERAL1
+ST7789_BLUE	LITERAL1
+ST7789_YELLOW	LITERAL1
+ST7789_CYAN	LITERAL1
+ST7789_MAGENTA	LITERAL1
+ST7789_GREY	LITERAL1
