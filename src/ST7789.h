@@ -39,6 +39,7 @@
 
 #include <Arduino.h>
 #include <SPI.h>
+#include "PinCompat.h" // D0..D13 pin-name aliases on cores that lack them
 
 static inline uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b)
 {

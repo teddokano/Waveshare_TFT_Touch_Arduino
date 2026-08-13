@@ -36,6 +36,7 @@
 
 #include <Arduino.h>
 #include <SPI.h>
+#include "PinCompat.h" // D0..D13 pin-name aliases on cores that lack them
 
 class XPT2046 {
 public:

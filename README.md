@@ -13,8 +13,8 @@ Both share the shield's single hardware SPI bus (separate chip-selects), and pin
 #include <ST7789.h>
 #include <XPT2046.h>
 
-ST7789  tft(10, 7, 9);   // LCD_CS, LCD_DC, LCD_BL
-XPT2046 touch(4, 3);     // TP_CS, TP_IRQ
+ST7789  tft(D10, D7, D9);   // LCD_CS, LCD_DC, LCD_BL
+XPT2046 touch(D4, D3);      // TP_CS, TP_IRQ
 
 void setup() {
   tft.begin();
@@ -46,7 +46,7 @@ Copy (or `git clone`) this repository into your Arduino `libraries/` folder, the
 
 This library targets the standard Arduino API (`pinMode`/`digitalWrite`/`SPI`) and has no board-specific dependencies.
 
-> **Note:** pass pin numbers as plain integers (`10, 7, 9, 4, 3`), not `D10`/`D7`/... macros -- those only exist on some 32-bit cores and aren't defined by the classic AVR core real UNO R3 boards use. The `TouchPaint` example already does this.
+> **Note:** `D10`/`D7`/... pin names are normally only defined by some 32-bit cores (this shield's mcx-arduino-core, UNO R4 Minima's renesas_uno) -- the classic AVR core real UNO R3 boards use doesn't define them at all. `<ST7789.h>`/`<XPT2046.h>` pull in [`src/PinCompat.h`](src/PinCompat.h), which fills in `D0`..`D13` on AVR cores only (guarded on the `__AVR__` compiler macro, not `#ifndef D0`, since D0 is an enum member rather than a preprocessor macro on cores that already define it), so `D10`-style pin names work everywhere.
 
 ### Build status
 
@@ -54,7 +54,7 @@ Board|Core|Status
 ---|---|---
 FRDM-MCXA153|[mcx-arduino-core](https://github.com/teddokano/mcx-arduino-core)|Builds
 UNO R4 Minima|`arduino:renesas_uno`|Builds
-UNO R3|`arduino:avr`|Failed to build before the `D`-macro fix above; not yet re-verified
+UNO R3|`arduino:avr`|Builds
 
 ## What's inside?
 

@@ -9,11 +9,12 @@
  *   TP_CS   -> D4    TP_IRQ -> D3
  *   SCLK/MOSI/MISO -> D13/D11/D12 (hardware SPI, shared by LCD + touch)
  *
- * Pins are passed below as plain integers (10, 7, 9, 4, 3), not the
- * `D10`/`D7`/... macros -- those are only defined by some 32-bit cores
- * (this shield's mcx-arduino-core, UNO R4 Minima's renesas_uno) and
- * don't exist on the classic AVR core that real UNO R3 boards use, so
- * plain pin numbers are what stays portable everywhere.
+ * `D10`/`D7`/... below are normally only defined by some 32-bit cores
+ * (this shield's mcx-arduino-core, UNO R4 Minima's renesas_uno) -- the
+ * classic AVR core real UNO R3 boards use doesn't define them at all.
+ * <ST7789.h>/<XPT2046.h> pull in src/PinCompat.h, which fills in
+ * D0..D13 on AVR cores only, so this stays portable everywhere while
+ * still reading as D10 instead of a bare, less obvious 10.
  *
  * What this sketch does:
  *   1. Draws the classic red/green/blue/grey corner test pattern so the
@@ -30,8 +31,8 @@
 #include <ST7789.h>
 #include <XPT2046.h>
 
-ST7789 tft(10, 7, 9);   // LCD_CS, LCD_DC, LCD_BL
-XPT2046 touch(4, 3);    // TP_CS, TP_IRQ
+ST7789 tft(D10, D7, D9);
+XPT2046 touch(D4, D3);
 
 static const uint16_t CLEAR_BAR_HEIGHT = 24;
 
