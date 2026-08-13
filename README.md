@@ -1,4 +1,6 @@
 # Waveshare_TFT_Touch_Arduino
+[![Compile examples](https://github.com/teddokano/Waveshare_TFT_Touch_Arduino/actions/workflows/compile-examples.yml/badge.svg)](https://github.com/teddokano/Waveshare_TFT_Touch_Arduino/actions/workflows/compile-examples.yml)
+
 Arduino driver for the [Waveshare 2.8inch TFT Touch Shield](https://www.waveshare.com/2.8inch-tft-touch-shield.htm) (Rev2.1: ST7789V LCD + XPT2046 resistive touch), Arduino Uno R3 shield form factor.
 
 ## What is this?
@@ -50,11 +52,13 @@ This library targets the standard Arduino API (`pinMode`/`digitalWrite`/`SPI`) a
 
 ### Build status
 
-Board|Core|Status
----|---|---
-FRDM-MCXA153|[mcx-arduino-core](https://github.com/teddokano/mcx-arduino-core)|Builds
-UNO R4 Minima|`arduino:renesas_uno`|Builds
-UNO R3|`arduino:avr`|Builds
+Every example is compiled against all three boards below on each push via [`.github/workflows/compile-examples.yml`](.github/workflows/compile-examples.yml) (see the badge at the top of this file) -- this only proves the examples *compile*, not that they've been run on real hardware.
+
+Board|Core|Compiles (CI)|Run on real hardware
+---|---|---|---
+FRDM-MCXA153|[mcx-arduino-core](https://github.com/teddokano/mcx-arduino-core)|Yes|`TouchPaint` only
+UNO R4 Minima|`arduino:renesas_uno`|Yes|`TouchPaint` only
+UNO R3|`arduino:avr`|Yes|`TouchPaint` only
 
 ## What's inside?
 

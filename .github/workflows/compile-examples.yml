@@ -1,0 +1,49 @@
+name: Compile examples
+
+# Compiles every example sketch against each board this library has
+# been verified on, catching build breaks (e.g. the D10-style pin
+# macros that only exist on some 32-bit cores and not on classic AVR)
+# without needing real hardware attached to CI.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        board:
+          - name: "UNO R3 (arduino:avr)"
+            fqbn: "arduino:avr:uno"
+            platforms: |
+              - name: arduino:avr
+
+          - name: "UNO R4 Minima (arduino:renesas_uno)"
+            fqbn: "arduino:renesas_uno:minima"
+            platforms: |
+              - name: arduino:renesas_uno
+
+          - name: "FRDM-MCXA153 (nxp:mcx / mcx-arduino-core)"
+            fqbn: "nxp:mcx:frdm_mcxa153"
+            platforms: |
+              - name: nxp:mcx
+                source-url: https://raw.githubusercontent.com/teddokano/mcx-arduino-core/main/package_nxp_mcx_index.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compile all examples
+        uses: arduino/compile-sketches@v1
+        with:
+          fqbn: ${{ matrix.board.fqbn }}
+          platforms: ${{ matrix.board.platforms }}
+          libraries: |
+            - name: SD
+          sketch-paths: |
+            - examples
