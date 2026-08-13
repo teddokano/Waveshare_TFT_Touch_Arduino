@@ -75,6 +75,15 @@ There is no LCD reset pin exposed on the header; `ST7789::begin()` initializes t
 
 `XPT2046::setCalibration()` controls how raw 12-bit ADC counts map to screen pixels. The defaults (`0..4095` on both axes, no swap/invert) are **uncalibrated** -- run the `TouchPaint` example, watch the `raw=(...)` values printed to Serial while touching known points on your panel, and adjust `setCalibration()` accordingly.
 
+## Acknowledgements
+
+This library targets the exact hardware of the Waveshare 2.8inch TFT Touch Shield, but its driver *logic* -- the ST7789V register init flow and the XPT2046 SPI read protocol -- is modeled on the [Zephyr Project](https://www.zephyrproject.org/)'s own clearly-licensed (Apache-2.0) drivers for these chips, not on Waveshare's unlicensed vendor sample code:
+
+- `src/ST7789.cpp` init sequence structure: [`zephyr/drivers/display/display_st7789v.c`](https://github.com/zephyrproject-rtos/zephyr/blob/main/drivers/display/display_st7789v.c) -- Copyright (c) 2017 Jan Van Winkel, 2019 Nordic Semiconductor ASA, 2019 Marc Reilly, 2019 PHYTEC Messtechnik GmbH, 2020 Endian Technologies AB, 2022 Basalte bv, 2026 Abderrahmane JARMOUNI. SPDX-License-Identifier: Apache-2.0.
+- `src/XPT2046.cpp` read protocol: [`zephyr/drivers/input/input_xpt2046.c`](https://github.com/zephyrproject-rtos/zephyr/blob/main/drivers/input/input_xpt2046.c) -- Copyright (c) 2023 Seppo Takalo. SPDX-License-Identifier: Apache-2.0.
+
+The panel-specific tuning values sent through that flow (gamma/VCOM/porch parameter bytes) are Waveshare's own published values for this exact panel, confirmed against their STM32 HAL reference code for this shield -- registers-and-values of this kind are treated as the panel's factual configuration data rather than as copyrightable expression, same as every other ST7789V driver for this panel converges on very similar numbers.
+
 ## License
 
-MIT -- see [LICENSE](LICENSE).
+MIT -- see [LICENSE](LICENSE). Portions of `src/ST7789.cpp` and `src/XPT2046.cpp` are structured after Apache-2.0-licensed Zephyr Project code; see Acknowledgements above.

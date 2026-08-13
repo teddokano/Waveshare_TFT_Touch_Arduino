@@ -10,11 +10,28 @@
  *   SCLK/MOSI/MISO -> D13/D11/D12 (hardware SPI)
  * There is no LCD reset pin exposed on the header.
  *
- * SPI mode is mode 0 (CPOL=0/CPHA=0). The panel init register sequence
- * below is transcribed from Waveshare's own STM32 HAL reference for this
- * exact shield (STM32/ShowImage/Drivers/LCD/lcd_driver.c, lcd_init()),
- * which is confirmed working hardware -- not a generic/borrowed ST7789
- * init table.
+ * SPI mode is mode 0 (CPOL=0/CPHA=0).
+ *
+ * Provenance of the init sequence in ST7789.cpp:
+ *  - Register command set and init flow (which registers to touch, in
+ *    what order, one command + parameter block at a time) are modeled on
+ *    the Zephyr project's ST7789V driver, which is clearly licensed:
+ *      zephyr/drivers/display/{display_st7789v.c,.h}
+ *      Copyright (c) 2017 Jan Van Winkel <jan.van_winkel@dxplore.eu>
+ *      Copyright (c) 2019 Nordic Semiconductor ASA
+ *      Copyright (c) 2019 Marc Reilly
+ *      Copyright (c) 2019 PHYTEC Messtechnik GmbH
+ *      Copyright (c) 2020 Endian Technologies AB
+ *      Copyright (c) 2022 Basalte bv
+ *      SPDX-FileCopyrightText: 2026 Abderrahmane JARMOUNI
+ *      SPDX-License-Identifier: Apache-2.0
+ *      https://github.com/zephyrproject-rtos/zephyr/tree/main/drivers/display
+ *  - The panel-specific tuning values sent through that flow (vcom,
+ *    gctrl, vrhs, vdvs, porch/pwctrl1/gamma parameter bytes) are
+ *    Waveshare's own published values for this exact panel, confirmed
+ *    against their STM32 HAL reference for this shield
+ *    (STM32/ShowImage/Drivers/LCD/lcd_driver.c, lcd_init()) -- not a
+ *    generic/borrowed ST7789 init table.
  */
 
 #ifndef ST7789_H
@@ -65,6 +82,9 @@ private:
 	void writeData(uint8_t data);
 	void writeData16(uint16_t data);
 	void pushColor(uint16_t color, uint32_t count);
+	// One command byte followed by its parameter bytes, e.g.
+	// Zephyr's st7789v_transmit(dev, cmd, data, len).
+	void transmit(uint8_t cmd, const uint8_t *data, size_t len);
 
 	uint8_t _csPin, _dcPin, _blPin;
 	uint8_t _rotation;

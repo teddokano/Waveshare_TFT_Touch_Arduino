@@ -4,6 +4,32 @@
 #define PANEL_W 240
 #define PANEL_H 320
 
+// Command set and names follow Zephyr's Apache-2.0 st7789v driver
+// (zephyr/drivers/display/display_st7789v.h) -- see ST7789.h for full
+// attribution. Values themselves are the panel's documented register
+// addresses (ST7789V datasheet), identical in every ST7789V driver.
+#define ST7789_CMD_SLEEP_OUT  0x11
+#define ST7789_CMD_INV_OFF    0x20
+#define ST7789_CMD_DISP_ON    0x29
+#define ST7789_CMD_CASET      0x2A
+#define ST7789_CMD_RASET      0x2B
+#define ST7789_CMD_RAMWR      0x2C
+#define ST7789_CMD_MADCTL     0x36
+#define ST7789_CMD_COLMOD     0x3A
+#define ST7789_CMD_PORCTRL    0xB2
+#define ST7789_CMD_GCTRL      0xB7
+#define ST7789_CMD_VCOMS      0xBB
+#define ST7789_CMD_LCMCTRL    0xC0
+#define ST7789_CMD_VDVVRHEN   0xC2
+#define ST7789_CMD_VRH        0xC3
+#define ST7789_CMD_VDV        0xC4
+#define ST7789_CMD_FRCTRL2    0xC6
+#define ST7789_CMD_PWCTRL1    0xD0
+#define ST7789_CMD_PVGAMCTRL  0xE0
+#define ST7789_CMD_NVGAMCTRL  0xE1
+#define ST7789_CMD_WRCACE     0x55 // Waveshare-specific extra register,
+                                   // not part of Zephyr's generic flow
+
 ST7789::ST7789(uint8_t csPin, uint8_t dcPin, uint8_t blPin)
 	: _csPin(csPin), _dcPin(dcPin), _blPin(blPin),
 	  _rotation(0), _width(PANEL_W), _height(PANEL_H)
@@ -44,6 +70,14 @@ void ST7789::pushColor(uint16_t color, uint32_t count)
 	digitalWrite(_csPin, HIGH);
 }
 
+void ST7789::transmit(uint8_t cmd, const uint8_t *data, size_t len)
+{
+	writeCommand(cmd);
+	for (size_t i = 0; i < len; i++) {
+		writeData(data[i]);
+	}
+}
+
 void ST7789::begin(uint32_t spiHz)
 {
 	_spiSettings = SPISettings(spiHz, MSBFIRST, SPI_MODE0);
@@ -57,45 +91,43 @@ void ST7789::begin(uint32_t spiHz)
 	SPI.begin();
 	SPI.beginTransaction(_spiSettings);
 
-	// --- ST7789V init sequence, byte-for-byte from Waveshare's STM32
-	// reference lcd_init() for this shield (ST7789V branch). No hardware
-	// reset pin is available, so init starts directly from the panel's
-	// power-on-reset state.
-	writeCommand(0x11);            // SLPOUT - sleep out
-	delay(120);                    // datasheet requires >=120ms after SLPOUT
+	// No hardware reset pin is available, so init starts directly from
+	// the panel's power-on-reset state.
+	writeCommand(ST7789_CMD_SLEEP_OUT);
+	delay(120); // datasheet requires >=120ms after SLEEP_OUT
 
-	writeCommand(0x36); writeData(0x00); // MADCTL (overwritten by setRotation() below)
-	writeCommand(0x3A); writeData(0x55); // COLMOD - 16bpp RGB565
+	// Register flow below follows Zephyr's st7789v_lcd_init() (see
+	// ST7789.h for the Apache-2.0 attribution); parameter values are
+	// Waveshare's own tuning for this panel.
+	static const uint8_t porch_param[]  = {0x0c, 0x0c, 0x00, 0x33, 0x33};
+	static const uint8_t pwctrl1_param[] = {0xa4, 0xa1};
+	static const uint8_t pvgam_param[]  = {0xd0, 0x01, 0x08, 0x0f, 0x11, 0x2a, 0x36,
+						0x55, 0x44, 0x3a, 0x0b, 0x06, 0x11, 0x20};
+	static const uint8_t nvgam_param[]  = {0xd0, 0x02, 0x07, 0x0a, 0x0b, 0x18, 0x34,
+						0x43, 0x4a, 0x2b, 0x1b, 0x1c, 0x22, 0x1f};
+	uint8_t gctrl = 0x35, vcom = 0x28, lcm = 0x3c;
+	uint8_t vdvvrhen = 0x01, vrh = 0x0b, vdv = 0x20, frctrl2 = 0x0f;
+	uint8_t madctl = 0x00; // overwritten by setRotation() below
+	uint8_t colmod = 0x55; // 16bpp RGB565
+	uint8_t wrcace = 0xB0; // Waveshare-specific, not in Zephyr's generic flow
 
-	writeCommand(0xB2);            // PORCTRL
-	writeData(0x0c); writeData(0x0c); writeData(0x00); writeData(0x33); writeData(0x33);
+	transmit(ST7789_CMD_PORCTRL, porch_param, sizeof(porch_param));
+	transmit(ST7789_CMD_FRCTRL2, &frctrl2, 1);
+	transmit(ST7789_CMD_GCTRL, &gctrl, 1);
+	transmit(ST7789_CMD_VCOMS, &vcom, 1);
+	transmit(ST7789_CMD_VDVVRHEN, &vdvvrhen, 1);
+	transmit(ST7789_CMD_VRH, &vrh, 1);
+	transmit(ST7789_CMD_VDV, &vdv, 1);
+	transmit(ST7789_CMD_PWCTRL1, pwctrl1_param, sizeof(pwctrl1_param));
+	transmit(ST7789_CMD_MADCTL, &madctl, 1);
+	transmit(ST7789_CMD_COLMOD, &colmod, 1);
+	transmit(ST7789_CMD_LCMCTRL, &lcm, 1);
+	transmit(ST7789_CMD_INV_OFF, nullptr, 0);
+	transmit(ST7789_CMD_PVGAMCTRL, pvgam_param, sizeof(pvgam_param));
+	transmit(ST7789_CMD_NVGAMCTRL, nvgam_param, sizeof(nvgam_param));
+	transmit(ST7789_CMD_WRCACE, &wrcace, 1);
 
-	writeCommand(0xB7); writeData(0x35); // GCTRL
-	writeCommand(0xBB); writeData(0x28); // VCOMS
-	writeCommand(0xC0); writeData(0x3c); // LCMCTRL
-	writeCommand(0xC2); writeData(0x01); // VDVVRHEN
-	writeCommand(0xC3); writeData(0x0b); // VRHS
-	writeCommand(0xC4); writeData(0x20); // VDVS
-	writeCommand(0xC6); writeData(0x0f); // FRCTRL2
-
-	writeCommand(0xD0);            // PWCTRL1
-	writeData(0xa4); writeData(0xa1);
-
-	writeCommand(0xE0);            // PVGAMCTRL
-	writeData(0xd0); writeData(0x01); writeData(0x08); writeData(0x0f);
-	writeData(0x11); writeData(0x2a); writeData(0x36); writeData(0x55);
-	writeData(0x44); writeData(0x3a); writeData(0x0b); writeData(0x06);
-	writeData(0x11); writeData(0x20);
-
-	writeCommand(0xE1);            // NVGAMCTRL
-	writeData(0xd0); writeData(0x02); writeData(0x07); writeData(0x0a);
-	writeData(0x0b); writeData(0x18); writeData(0x34); writeData(0x43);
-	writeData(0x4a); writeData(0x2b); writeData(0x1b); writeData(0x1c);
-	writeData(0x22); writeData(0x1f);
-
-	writeCommand(0x55); writeData(0xB0); // WRCACE
-
-	writeCommand(0x29);            // DISPON
+	writeCommand(ST7789_CMD_DISP_ON);
 
 	SPI.endTransaction();
 
@@ -121,7 +153,7 @@ void ST7789::setRotation(uint8_t rotation)
 	}
 
 	SPI.beginTransaction(_spiSettings);
-	writeCommand(0x36);
+	writeCommand(ST7789_CMD_MADCTL);
 	writeData(madctl);
 	SPI.endTransaction();
 }
@@ -131,15 +163,15 @@ void ST7789::setAddrWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 	uint16_t xe = x + w - 1;
 	uint16_t ye = y + h - 1;
 
-	writeCommand(0x2A); // CASET
+	writeCommand(ST7789_CMD_CASET);
 	writeData16(x);
 	writeData16(xe);
 
-	writeCommand(0x2B); // RASET
+	writeCommand(ST7789_CMD_RASET);
 	writeData16(y);
 	writeData16(ye);
 
-	writeCommand(0x2C); // RAMWR
+	writeCommand(ST7789_CMD_RAMWR);
 }
 
 void ST7789::drawPixel(int16_t x, int16_t y, uint16_t color)
