@@ -23,6 +23,10 @@ drawRect	KEYWORD2
 drawLine	KEYWORD2
 drawCircle	KEYWORD2
 fillCircle	KEYWORD2
+startWrite	KEYWORD2
+writePixels	KEYWORD2
+endWrite	KEYWORD2
+setPressureThreshold	KEYWORD2
 touched	KEYWORD2
 getRaw	KEYWORD2
 setCalibration	KEYWORD2

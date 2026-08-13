@@ -77,6 +77,17 @@ public:
 	void drawCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color);
 	void fillCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color);
 
+	// Streaming pixel writes, for callers pushing image data (e.g. a
+	// bitmap decoded from SD) instead of a single flat color. Each
+	// startWrite()/writePixels()/endWrite() sequence must push exactly
+	// w*h pixels, in row-major order, between startWrite() and
+	// endWrite() -- and must not be interleaved with SPI activity from
+	// another device sharing the bus (such as an SD card read) before
+	// endWrite() closes the transaction.
+	void startWrite(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
+	void writePixels(const uint16_t *colors, uint32_t count);
+	void endWrite(void);
+
 private:
 	void setAddrWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
 	void writeCommand(uint8_t cmd);

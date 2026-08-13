@@ -3,10 +3,10 @@ Arduino driver for the [Waveshare 2.8inch TFT Touch Shield](https://www.waveshar
 
 ## What is this?
 An Arduino library providing:
-- **`ST7789`** -- graphics primitives (fill/pixel/line/rect/circle) for the shield's 240x320 ST7789V LCD
+- **`ST7789`** -- graphics primitives (fill/pixel/line/rect/circle) plus `startWrite()`/`writePixels()`/`endWrite()` for streaming arbitrary pixel data (e.g. a decoded image) to the shield's 240x320 ST7789V LCD
 - **`XPT2046`** -- raw and calibrated touch position reading for the shield's XPT2046 touch controller
 
-Both share the shield's single hardware SPI bus (separate chip-selects), and pin mapping is fixed by the shield's own PCB -- there's nothing to wire or configure.
+Both share the shield's single hardware SPI bus with the onboard microSD slot (separate chip-selects), and pin mapping is fixed by the shield's own PCB -- there's nothing to wire or configure. When mixing in SD card access (see `SDBitmapViewer`), keep each device's `SPI.beginTransaction()`/`endTransaction()` pair short and non-overlapping -- don't hold an `ST7789::startWrite()` transaction open across an SD read.
 
 ```cpp
 #include <SPI.h>
@@ -63,8 +63,9 @@ UNO R3|`arduino:avr`|Builds
 Sketch|Feature
 ---|---
 `TouchPaint`|Draws the red/green/blue/grey corner test pattern (checks LCD orientation and RGB order at a glance), then a simple touch-paint loop that also prints raw + mapped touch coordinates to Serial
+`SDBitmapViewer`|Lists 24-bit uncompressed BMP files on the shield's onboard microSD slot and draws them on the LCD; touch anywhere to show the next image. Needs the standard `SD` library (bundled with the Arduino IDE)
 
-After installing the library: `File` -> `Examples` -> `Waveshare_TFT_Touch` -> `TouchPaint`
+After installing the library: `File` -> `Examples` -> `Waveshare_TFT_Touch` -> pick a sketch
 
 ## Pin mapping
 
@@ -77,7 +78,8 @@ LCD_DC|D7
 LCD_BL|D9
 TP_CS|D4
 TP_IRQ|D3
-SCLK / MOSI / MISO|D13 / D11 / D12 (hardware SPI, shared by LCD and touch)
+SD_CS|D5 (onboard microSD slot; see `SDBitmapViewer`)
+SCLK / MOSI / MISO|D13 / D11 / D12 (hardware SPI, shared by LCD, touch, and SD)
 
 There is no LCD reset pin exposed on the header; `ST7789::begin()` initializes the panel directly from its power-on-reset state.
 

@@ -266,6 +266,27 @@ void ST7789::drawCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color)
 	} while (x <= 0);
 }
 
+void ST7789::startWrite(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
+{
+	SPI.beginTransaction(_spiSettings);
+	setAddrWindow(x, y, w, h);
+}
+
+void ST7789::writePixels(const uint16_t *colors, uint32_t count)
+{
+	digitalWrite(_dcPin, HIGH);
+	digitalWrite(_csPin, LOW);
+	for (uint32_t i = 0; i < count; i++) {
+		SPI.transfer16(colors[i]);
+	}
+	digitalWrite(_csPin, HIGH);
+}
+
+void ST7789::endWrite(void)
+{
+	SPI.endTransaction();
+}
+
 void ST7789::fillCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color)
 {
 	for (int16_t y = -r; y <= r; y++) {
