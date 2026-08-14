@@ -60,12 +60,33 @@ void ST7789::writeData16(uint16_t data)
 	digitalWrite(_csPin, HIGH);
 }
 
+// Chunk size for buffer-based SPI.transfer(buf, count) bursts below.
+// Kept safely under 128 bytes: at least one supported core's
+// SPI.transfer(buf, count) copies the received data into a fixed
+// 128-byte stack buffer sized to the caller's byte count, so a chunk
+// any larger would overflow it. 32 pixels = 64 bytes.
+static const uint32_t PIXEL_CHUNK = 32;
+
 void ST7789::pushColor(uint16_t color, uint32_t count)
 {
+	uint8_t hi = (uint8_t)(color >> 8);
+	uint8_t lo = (uint8_t)(color & 0xFF);
+	uint8_t buf[PIXEL_CHUNK * 2];
+
 	digitalWrite(_dcPin, HIGH);
 	digitalWrite(_csPin, LOW);
-	for (uint32_t i = 0; i < count; i++) {
-		SPI.transfer16(color);
+	while (count > 0) {
+		uint32_t n = count < PIXEL_CHUNK ? count : PIXEL_CHUNK;
+		// SPI.transfer(buf, ...) is in-place full-duplex -- it
+		// overwrites buf with whatever comes back on MISO, so it must
+		// be refilled before every chunk, not just once outside the
+		// loop.
+		for (uint32_t i = 0; i < n; i++) {
+			buf[i * 2]     = hi;
+			buf[i * 2 + 1] = lo;
+		}
+		SPI.transfer(buf, n * 2);
+		count -= n;
 	}
 	digitalWrite(_csPin, HIGH);
 }
@@ -274,11 +295,23 @@ void ST7789::startWrite(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 
 void ST7789::writePixels(const uint16_t *colors, uint32_t count)
 {
+	uint8_t buf[PIXEL_CHUNK * 2];
+
 	digitalWrite(_dcPin, HIGH);
 	digitalWrite(_csPin, LOW);
-	for (uint32_t i = 0; i < count; i++) {
-		SPI.transfer16(colors[i]);
+
+	uint32_t idx = 0;
+	while (idx < count) {
+		uint32_t n = (count - idx) < PIXEL_CHUNK ? (count - idx) : PIXEL_CHUNK;
+		for (uint32_t i = 0; i < n; i++) {
+			uint16_t c = colors[idx + i];
+			buf[i * 2]     = (uint8_t)(c >> 8);
+			buf[i * 2 + 1] = (uint8_t)(c & 0xFF);
+		}
+		SPI.transfer(buf, n * 2);
+		idx += n;
 	}
+
 	digitalWrite(_csPin, HIGH);
 }
 
