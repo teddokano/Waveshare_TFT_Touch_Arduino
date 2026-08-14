@@ -25,11 +25,11 @@
  *      at the top wipes the canvas. Screen position, raw pressure, and
  *      the radius it maps to are printed to Serial.
  *
- *      MIN_Z/MAX_Z below are set from real pressure readings logged on
- *      actual hardware (z ~2500-2600 for a firm press; the driver's
- *      z-threshold default of 100 is the lightest a touch can register
- *      at all) -- retune them to taste, or by watching the printed "z="
- *      values on your own panel.
+ *      MIN_Z/MAX_Z below are set from real light/firm touches measured
+ *      on actual hardware (z~1000 light, z~1500 firm -- pressure range
+ *      is quite narrow in practice, much tighter than the driver's
+ *      z-threshold-to-max theoretical span) -- retune them to taste, or
+ *      by watching the printed "z=" values on your own panel.
  */
 
 #include <Arduino.h>
@@ -44,8 +44,8 @@ static const uint16_t CLEAR_BAR_HEIGHT = 24;
 
 // Pressure-to-radius mapping; see the header comment for where these
 // numbers come from.
-static const uint16_t MIN_Z = 200;   // just above a light touch
-static const uint16_t MAX_Z = 3000;  // firm press
+static const uint16_t MIN_Z = 1000;  // light touch
+static const uint16_t MAX_Z = 1500;  // firm press
 static const uint16_t MIN_RADIUS = 1;
 static const uint16_t MAX_RADIUS = 8;
 
