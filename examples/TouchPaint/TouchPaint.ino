@@ -63,10 +63,17 @@ void setup(void)
 	tft.setRotation(1); // landscape, 320x240
 
 	touch.begin();
-	// Uncalibrated defaults (full 0..4095 raw range, no swap/invert).
-	// Watch the "raw" values printed to Serial while touching known
-	// screen corners, then replace these with your panel's real range.
-	touch.setCalibration(0, 4095, 0, 4095, /*swapXY=*/true, /*invertX=*/false, /*invertY=*/false);
+	// Full 0..4095 raw range (uncalibrated), but swapXY/invertX/invertY
+	// are confirmed correct for this rotation on real hardware -- see
+	// the Zephyr port of this same shield
+	// (~/dev/Zephyr/waveshare_2_8_lcd/boards/shields/waveshare_2_8_tft_touch/waveshare_2_8_tft_touch.overlay),
+	// whose overlay comment logs the same finding: the raw X channel
+	// tracks the panel's vertical axis correctly (top=low, bottom=high),
+	// while the raw Y channel tracks the horizontal axis but reversed
+	// (left=high, right=low) -- hence swapXY with only invertX set.
+	// Run the TouchCalibration example if your panel needs a tighter
+	// raw range than the full 0..4095 span.
+	touch.setCalibration(0, 4095, 0, 4095, /*swapXY=*/true, /*invertX=*/true, /*invertY=*/false);
 
 	drawCornerTestPattern();
 	delay(3000);

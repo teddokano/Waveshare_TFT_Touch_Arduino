@@ -22,7 +22,7 @@ void setup() {
   tft.begin();
   tft.setRotation(1);       // landscape, 320x240
   touch.begin();
-  touch.setCalibration(0, 4095, 0, 4095, true, false, false);
+  touch.setCalibration(0, 4095, 0, 4095, true, true, false);
 
   tft.fillScreen(ST7789_BLACK);
   tft.fillCircle(160, 120, 40, ST7789_RED);
@@ -93,7 +93,15 @@ There is no LCD reset pin exposed on the header; `ST7789::begin()` initializes t
 
 ## Touch calibration
 
-`XPT2046::setCalibration()` controls how raw 12-bit ADC counts map to screen pixels. The defaults (`0..4095` on both axes, no swap/invert) are **uncalibrated** -- run the `TouchCalibration` example and it prints a ready-to-paste `setCalibration()` call for your panel. (`TouchPaint`'s `raw=(...)` Serial printout also works for calibrating by hand, if you'd rather.)
+`XPT2046::setCalibration()` controls how raw 12-bit ADC counts map to screen pixels. The examples' defaults (`0..4095` raw range on both axes, `swapXY=true, invertX=true, invertY=false`) use the full uncalibrated ADC range, but the swap/invert flags themselves are confirmed correct for this rotation against real hardware -- see the companion [Zephyr port of this same shield](https://github.com/teddokano/zephyr-waveshare-2.8-tft-touch-shield), whose overlay comment logs the same finding from touching all four screen corners: the raw X channel tracks the panel's vertical axis correctly (top=low, bottom=high), while the raw Y channel tracks the horizontal axis but reversed (left=high, right=low).
+
+If your panel's raw range doesn't span close to the full `0..4095`, run the `TouchCalibration` example -- it prints a ready-to-paste `setCalibration()` call tuned to your specific unit. (`TouchPaint`'s `raw=(...)` Serial printout also works for calibrating by hand, if you'd rather.)
+
+## Troubleshooting
+
+**Nothing on the SPI bus responds (LCD stays dark, touch never registers) no matter how correct the wiring/software looks:** on at least some shield units, the solder-bridge jumpers **SB1/SB2/SB3** on the back of the PCB (near R34/R35/R36 on the schematic) ship unbridged, leaving part of the SPI bus physically open. Bridge them (solder blob or 0-ohm resistor) before debugging anything in software. This is a real hardware fault found the hard way while bringing this same shield up under Zephyr -- it isn't specific to Arduino, so it can bite this library's examples too.
+
+**On FRDM-MCXA153, LCD_CS (D10) writes report success but the panel never responds:** the same Zephyr bring-up found that this board's *default* SPI pin mux routes D10 to the LPSPI peripheral's own hardware chip-select function rather than plain GPIO -- with that mux in place, `digitalWrite()` on D10 has no effect on the physical pin at all, even though every SPI transfer and GPIO call reports success in software (see `frdm_mcxa153.overlay` in that project for the fix, on the Zephyr side). This library hasn't hit that failure mode on mcx-arduino-core, but if LCD_CS ever seems to have "no effect" there, check whether D10 is muxed to hardware SPI CS instead of plain GPIO in the board's pin configuration.
 
 ## Acknowledgements
 
@@ -103,6 +111,8 @@ This library targets the exact hardware of the Waveshare 2.8inch TFT Touch Shiel
 - `src/XPT2046.cpp` read protocol: [`zephyr/drivers/input/input_xpt2046.c`](https://github.com/zephyrproject-rtos/zephyr/blob/main/drivers/input/input_xpt2046.c) -- Copyright (c) 2023 Seppo Takalo. SPDX-License-Identifier: Apache-2.0.
 
 The panel-specific tuning values sent through that flow (gamma/VCOM/porch parameter bytes) are Waveshare's own published values for this exact panel, confirmed against their STM32 HAL reference code for this shield -- registers-and-values of this kind are treated as the panel's factual configuration data rather than as copyrightable expression, same as every other ST7789V driver for this panel converges on very similar numbers.
+
+The default `swapXY`/`invertX`/`invertY` touch calibration flags in the examples, and the SB1/SB2/SB3 and FRDM-MCXA153 CS-mux notes above, come from real-hardware findings logged in the same author's [Zephyr shield support for this hardware](https://github.com/teddokano/zephyr-waveshare-2.8-tft-touch-shield) (touch corner-logging results and debugging notes in `waveshare_2_8_tft_touch.overlay` and `frdm_mcxa153.overlay`) -- these are hardware facts rather than Zephyr-specific code, but are credited here since that's where they were actually discovered.
 
 ## License
 

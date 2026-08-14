@@ -208,7 +208,9 @@ void setup(void)
 	tft.begin();
 	tft.setRotation(1); // landscape, 320x240
 	touch.begin();
-	touch.setCalibration(0, 4095, 0, 4095, /*swapXY=*/true, /*invertX=*/false, /*invertY=*/false);
+	// See TouchPaint.ino for why swapXY+invertX (not invertY): confirmed
+	// against real hardware in the Zephyr port of this same shield.
+	touch.setCalibration(0, 4095, 0, 4095, /*swapXY=*/true, /*invertX=*/true, /*invertY=*/false);
 
 	tft.fillScreen(ST7789_BLACK);
 

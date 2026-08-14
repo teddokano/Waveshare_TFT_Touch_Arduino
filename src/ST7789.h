@@ -32,6 +32,14 @@
  *    against their STM32 HAL reference for this shield
  *    (STM32/ShowImage/Drivers/LCD/lcd_driver.c, lcd_init()) -- not a
  *    generic/borrowed ST7789 init table.
+ *
+ * Note for anyone cross-referencing the Zephyr shield overlay: it
+ * selects PANEL_PIXEL_FORMAT_RGB_565X (byte-swapped) rather than plain
+ * RGB_565. That's compensating for how Zephyr's sample fills a raw
+ * framebuffer in host memory order before a bulk SPI write -- it
+ * doesn't apply here, since writeData16()/pushColor() always send each
+ * pixel high-byte-first via SPI.transfer16(..., MSBFIRST) explicitly,
+ * regardless of this MCU's own (little-endian) memory layout.
  */
 
 #ifndef ST7789_H
