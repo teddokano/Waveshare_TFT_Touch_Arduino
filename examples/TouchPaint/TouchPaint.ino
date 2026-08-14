@@ -23,6 +23,15 @@
  *      fixed-radius dots on screen, and touching the "CLEAR" bar at the
  *      top wipes the canvas. Screen position is printed to Serial.
  *
+ *      Consecutive touch samples during a drag can land further apart
+ *      than DOT_RADIUS*2 -- confirmed on real hardware, even dragging
+ *      slowly -- so drawing a dot only at each raw sample would leave
+ *      small gaps between them (visible as tiny notches biting into an
+ *      otherwise-solid stroke). loop() interpolates extra dots between
+ *      the previous and current point whenever they're further apart
+ *      than DOT_RADIUS, so the stroke stays solid regardless of the
+ *      actual sampling gap.
+ *
  *      (A pressure-sensitive brush -- radius scaled from XPT2046's raw
  *      Z reading -- was tried here and measured working, but Z turned
  *      out to vary by screen location as well as by force on this
@@ -37,6 +46,7 @@
 #include <SPI.h>
 #include <ST7789.h>
 #include <XPT2046.h>
+#include <math.h>
 
 ST7789 tft(D10, D7, D9);
 XPT2046 touch(D4, D3);
@@ -93,9 +103,13 @@ void setup(void)
 
 void loop(void)
 {
+	static bool haveLast = false;
+	static uint16_t lastX = 0, lastY = 0;
+
 	uint16_t x, y;
 
 	if (!touch.getPoint(x, y, tft.width(), tft.height())) {
+		haveLast = false; // next touch-down starts a new stroke, not a line from here
 		return;
 	}
 
@@ -112,8 +126,24 @@ void loop(void)
 	// stray sliver stays there permanently, clear or not.
 	if (y < CLEAR_BAR_HEIGHT + DOT_RADIUS) {
 		tft.fillRect(0, CLEAR_BAR_HEIGHT, tft.width(), tft.height() - CLEAR_BAR_HEIGHT, ST7789_BLACK);
+		haveLast = false;
 		return;
 	}
 
+	if (haveLast) {
+		float dx = (float)x - (float)lastX;
+		float dy = (float)y - (float)lastY;
+		float dist = sqrt(dx * dx + dy * dy);
+		uint16_t steps = (uint16_t)(dist / DOT_RADIUS);
+		for (uint16_t i = 1; i < steps; i++) {
+			int16_t ix = lastX + (int16_t)(dx * i / steps);
+			int16_t iy = lastY + (int16_t)(dy * i / steps);
+			tft.fillCircle(ix, iy, DOT_RADIUS, ST7789_WHITE);
+		}
+	}
+
 	tft.fillCircle(x, y, DOT_RADIUS, ST7789_WHITE);
+	lastX = x;
+	lastY = y;
+	haveLast = true;
 }
