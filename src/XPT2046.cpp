@@ -78,9 +78,39 @@ bool XPT2046::getRaw(uint16_t &x, uint16_t &y, uint16_t &z)
 		return false; // cheap pre-check, avoids an SPI transfer
 	}
 
-	readRaw9(x, y, z);
+	// The instant right as a finger lifts off is electrically noisy --
+	// TP_IRQ can still read low for a moment while the resistive
+	// contact itself is unstable, which can produce a single garbage
+	// x/y sample that still happens to clear the pressure threshold.
+	// Two back-to-back reads of a real, steady touch land within a few
+	// counts of each other; a release-glitch sample usually doesn't
+	// match its neighbor. Reject the pair when they disagree by more
+	// than COORD_TOLERANCE, same debounce strategy used by most
+	// XPT2046 drivers (e.g. Waveshare's own reference code averages
+	// two reads and rejects them past a fixed error range).
+	const uint16_t COORD_TOLERANCE = 100;
 
-	return z > _zThreshold;
+	uint16_t x1, y1, z1;
+	readRaw9(x1, y1, z1);
+	if (z1 <= _zThreshold) {
+		return false;
+	}
+
+	uint16_t x2, y2, z2;
+	readRaw9(x2, y2, z2);
+	if (z2 <= _zThreshold) {
+		return false;
+	}
+
+	if (abs((int32_t)x1 - (int32_t)x2) > COORD_TOLERANCE ||
+	    abs((int32_t)y1 - (int32_t)y2) > COORD_TOLERANCE) {
+		return false;
+	}
+
+	x = (uint16_t)(((uint32_t)x1 + x2) / 2);
+	y = (uint16_t)(((uint32_t)y1 + y2) / 2);
+	z = (uint16_t)(((uint32_t)z1 + z2) / 2);
+	return true;
 }
 
 bool XPT2046::getRaw(uint16_t &x, uint16_t &y)

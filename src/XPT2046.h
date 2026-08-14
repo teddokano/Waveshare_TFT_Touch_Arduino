@@ -54,7 +54,12 @@ public:
 	bool getRaw(uint16_t &x, uint16_t &y);
 
 	// Same as getRaw(), also reporting the raw Z pressure reading used
-	// internally to confirm a touch (see setPressureThreshold()).
+	// internally to confirm a touch (see setPressureThreshold()). Takes
+	// two back-to-back samples and rejects the pair if they disagree by
+	// more than a small tolerance -- filters out the single noisy
+	// sample that can otherwise slip through right as a finger lifts
+	// off, which would otherwise show up as a stray point drawn after
+	// the touch has already ended (confirmed on real hardware).
 	bool getRaw(uint16_t &x, uint16_t &y, uint16_t &z);
 
 	// Minimum Z pressure reading for a sample to count as a real touch.
