@@ -56,7 +56,7 @@ Every example is compiled against all three boards below on each push via [`.git
 
 Board|Core|Compiles (CI)|Run on real hardware
 ---|---|---|---
-FRDM-MCXA153|[mcx-arduino-core](https://github.com/teddokano/mcx-arduino-core)|Yes, except `SDBitmapViewer`\*|`TouchPaint` only
+FRDM-MCXA153|[mcx-arduino-core](https://github.com/teddokano/mcx-arduino-core)|Yes, except `SDBitmapViewer`\*|`TouchPaint` (LCD + touch confirmed working; fill/draw speed now matches UNO R3/R4 Minima after the pixel-batching fix)
 UNO R4 Minima|`arduino:renesas_uno`|Yes|`TouchPaint` (LCD + touch confirmed working, including a true 30s-cold-boot), `GraphicsPrimitivesDemo`, `TouchCalibration`
 UNO R3|`arduino:avr`|Yes|`TouchPaint` (LCD + touch confirmed working, including a true 30s-cold-boot), `GraphicsPrimitivesDemo` (all four rotations confirmed correct), `TouchCalibration` (confirmed tracking accurately edge-to-edge)
 
