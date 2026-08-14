@@ -75,6 +75,12 @@ public:
 	// (0..screenW-1, 0..screenH-1) using the current calibration.
 	bool getPoint(uint16_t &x, uint16_t &y, uint16_t screenW, uint16_t screenH);
 
+	// Same as getPoint(), also reporting the raw Z pressure reading (see
+	// getRaw(x,y,z)) alongside the mapped position -- lets a caller vary
+	// something like brush thickness with how hard the panel is
+	// pressed, from a single read instead of two.
+	bool getPoint(uint16_t &x, uint16_t &y, uint16_t &z, uint16_t screenW, uint16_t screenH);
+
 private:
 	// One interleaved SPI transfer reading Z1, Z2, X, and Y (16
 	// clocks-per-conversion mode); see XPT2046.cpp for the layout.

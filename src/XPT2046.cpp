@@ -132,11 +132,11 @@ void XPT2046::setCalibration(uint16_t rawXMin, uint16_t rawXMax,
 	_invertY = invertY;
 }
 
-bool XPT2046::getPoint(uint16_t &x, uint16_t &y, uint16_t screenW, uint16_t screenH)
+bool XPT2046::getPoint(uint16_t &x, uint16_t &y, uint16_t &z, uint16_t screenW, uint16_t screenH)
 {
 	uint16_t rawX, rawY;
 
-	if (!getRaw(rawX, rawY)) {
+	if (!getRaw(rawX, rawY, z)) {
 		return false;
 	}
 
@@ -158,4 +158,10 @@ bool XPT2046::getPoint(uint16_t &x, uint16_t &y, uint16_t screenW, uint16_t scre
 	x = (uint16_t)px;
 	y = (uint16_t)py;
 	return true;
+}
+
+bool XPT2046::getPoint(uint16_t &x, uint16_t &y, uint16_t screenW, uint16_t screenH)
+{
+	uint16_t z;
+	return getPoint(x, y, z, screenW, screenH);
 }

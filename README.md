@@ -68,7 +68,7 @@ UNO R3|`arduino:avr`|Yes|`TouchPaint` (LCD + touch both confirmed working)
 
 Sketch|Feature
 ---|---
-`TouchPaint`|Draws the red/green/blue/grey corner test pattern (checks LCD orientation and RGB order at a glance), then a simple touch-paint loop that also prints raw + mapped touch coordinates to Serial
+`TouchPaint`|Draws the red/green/blue/grey corner test pattern (checks LCD orientation and RGB order at a glance), then a pressure-sensitive touch-paint loop -- dot radius grows with how hard you press -- that prints position/pressure/radius to Serial
 `SDBitmapViewer`|Lists 24-bit uncompressed BMP files on the shield's onboard microSD slot and draws them on the LCD; touch anywhere to show the next image. Needs the standard `SD` library (bundled with the Arduino IDE)
 `GraphicsPrimitivesDemo`|Exercises every drawing primitive (fillRect/drawRect/lines/circles) and cycles through all four `setRotation()` orientations every few seconds -- a quick bring-up/visual-regression check, LCD only
 `TouchCalibration`|Guided wizard: touch four on-screen crosshairs and it prints a ready-to-paste `setCalibration()` call, auto-detecting axis swap/inversion instead of TouchPaint's hardcoded guesses
@@ -95,7 +95,7 @@ There is no LCD reset pin exposed on the header; `ST7789::begin()` initializes t
 
 `XPT2046::setCalibration()` controls how raw 12-bit ADC counts map to screen pixels. The examples' defaults (`0..4095` raw range on both axes, `swapXY=true, invertX=true, invertY=false`) use the full uncalibrated ADC range, but the swap/invert flags themselves are confirmed correct for this rotation against real hardware -- see the companion [Zephyr port of this same shield](https://github.com/teddokano/zephyr-waveshare-2.8-tft-touch-shield), whose overlay comment logs the same finding from touching all four screen corners: the raw X channel tracks the panel's vertical axis correctly (top=low, bottom=high), while the raw Y channel tracks the horizontal axis but reversed (left=high, right=low).
 
-If your panel's raw range doesn't span close to the full `0..4095`, run the `TouchCalibration` example -- it prints a ready-to-paste `setCalibration()` call tuned to your specific unit. (`TouchPaint`'s `raw=(...)` Serial printout also works for calibrating by hand, if you'd rather.)
+If your panel's raw range doesn't span close to the full `0..4095`, run the `TouchCalibration` example -- it prints a ready-to-paste `setCalibration()` call tuned to your specific unit.
 
 ## Troubleshooting
 
