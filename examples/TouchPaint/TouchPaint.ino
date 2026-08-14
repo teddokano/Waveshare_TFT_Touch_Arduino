@@ -58,10 +58,11 @@ static void drawClearBar(void)
 void setup(void)
 {
 	Serial.begin(115200);
+	while (!Serial)
+		;
 
 	tft.begin();
 	tft.setRotation(1); // landscape, 320x240
-
 	touch.begin();
 	// Full 0..4095 raw range (uncalibrated), but swapXY/invertX/invertY
 	// are confirmed correct for this rotation on real hardware -- see
