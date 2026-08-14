@@ -35,6 +35,7 @@ ST7789 tft(D10, D7, D9);
 XPT2046 touch(D4, D3);
 
 static const uint16_t CLEAR_BAR_HEIGHT = 24;
+static const uint16_t DOT_RADIUS = 2;
 
 static void drawCornerTestPattern(void)
 {
@@ -104,10 +105,15 @@ void loop(void)
 	Serial.print(y);
 	Serial.println(")");
 
-	if (y < CLEAR_BAR_HEIGHT) {
+	// Treat "close enough that the dot would overlap the bar" as a bar
+	// touch too -- otherwise a dot centered just below the boundary
+	// still bleeds DOT_RADIUS pixels up into the bar, and since the bar
+	// itself is only ever drawn once at startup (never refreshed), that
+	// stray sliver stays there permanently, clear or not.
+	if (y < CLEAR_BAR_HEIGHT + DOT_RADIUS) {
 		tft.fillRect(0, CLEAR_BAR_HEIGHT, tft.width(), tft.height() - CLEAR_BAR_HEIGHT, ST7789_BLACK);
 		return;
 	}
 
-	tft.fillCircle(x, y, 2, ST7789_WHITE);
+	tft.fillCircle(x, y, DOT_RADIUS, ST7789_WHITE);
 }
