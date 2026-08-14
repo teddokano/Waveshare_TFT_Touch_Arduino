@@ -62,19 +62,34 @@ static void sampleAtPoint(const char *label, int16_t sx, int16_t sy, uint16_t &r
 	delay(200); // settle before the next crosshair appears
 }
 
-// From the raw reading at the low-coordinate end and the high-
-// coordinate end of one axis, works out (min, max, invert) for
-// setCalibration() -- min/max always come out numerically ordered,
-// with invert recording whether the raw axis actually runs backwards.
-static void computeAxisCalib(uint16_t lowEnd, uint16_t highEnd, uint16_t &outMin, uint16_t &outMax, bool &outInvert)
+// From the raw readings at the two TARGET_MARGIN-inset touch points on
+// one axis, works out (min, max, invert) for setCalibration() -- the
+// raw value setCalibration() needs is at the true edges (screen
+// position 0 and axisSize-1), not at the inset points actually
+// touched, so this extrapolates the two measured points out to those
+// edges by their measured slope rather than using them directly.
+// Using the inset readings as-is (i.e. as if position 0 and
+// axisSize-1 had been touched) was tried first and confirmed on real
+// hardware to systematically undersize the raw span, since it's
+// really calibrating against only (axisSize-1-2*TARGET_MARGIN) pixels
+// of physical travel -- the visible symptom was the tracked point
+// overshooting real finger movement, worst near the screen edges.
+// min/max always come out numerically ordered, with invert recording
+// whether the raw axis actually runs backwards.
+static void computeAxisCalib(float lowEnd, float highEnd, uint16_t axisSize, uint16_t &outMin, uint16_t &outMax, bool &outInvert)
 {
-	if (lowEnd <= highEnd) {
-		outMin = lowEnd;
-		outMax = highEnd;
+	float span = (float)(axisSize - 1 - 2 * TARGET_MARGIN); // physical pixels between the two touch points
+	float slope = (highEnd - lowEnd) / span;                // raw counts per physical pixel
+	float rawAt0   = lowEnd - slope * TARGET_MARGIN;
+	float rawAtMax = highEnd + slope * TARGET_MARGIN;
+
+	if (rawAt0 <= rawAtMax) {
+		outMin = (uint16_t)constrain(rawAt0, 0.0f, 4095.0f);
+		outMax = (uint16_t)constrain(rawAtMax, 0.0f, 4095.0f);
 		outInvert = false;
 	} else {
-		outMin = highEnd;
-		outMax = lowEnd;
+		outMin = (uint16_t)constrain(rawAtMax, 0.0f, 4095.0f);
+		outMax = (uint16_t)constrain(rawAt0, 0.0f, 4095.0f);
 		outInvert = true;
 	}
 }
@@ -120,8 +135,8 @@ void setup(void)
 
 	uint16_t rawXMin, rawXMax, rawYMin, rawYMax;
 	bool invertX, invertY;
-	computeAxisCalib((chX_TL + chX_BL) / 2, (chX_TR + chX_BR) / 2, rawXMin, rawXMax, invertX);
-	computeAxisCalib((chY_TL + chY_TR) / 2, (chY_BL + chY_BR) / 2, rawYMin, rawYMax, invertY);
+	computeAxisCalib((chX_TL + chX_BL) / 2.0f, (chX_TR + chX_BR) / 2.0f, w, rawXMin, rawXMax, invertX);
+	computeAxisCalib((chY_TL + chY_TR) / 2.0f, (chY_BL + chY_BR) / 2.0f, h, rawYMin, rawYMax, invertY);
 
 	touch.setCalibration(rawXMin, rawXMax, rawYMin, rawYMax, swapXY, invertX, invertY);
 
