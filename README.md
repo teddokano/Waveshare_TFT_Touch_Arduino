@@ -105,6 +105,16 @@ If your panel's raw range doesn't span close to the full `0..4095`, run the `Tou
 
 **`XPT2046::getPoint(x, y, z, ...)`'s Z pressure reading isn't a reliable stand-in for "how hard is this touch":** measured on real hardware, Z varies noticeably by screen location as well as by actual force -- e.g. reading distinctly lower near the top-left corner even under a firm press. A pressure-sensitive brush example built on it therefore drew visibly thinner lines in that corner regardless of how hard it was pressed. Z is still useful as a touch/no-touch gate (which is all `getRaw()`/`getPoint()` use it for internally), but don't rely on its absolute magnitude for anything position-independent without compensating for this per-panel.
 
+## Known issues
+
+**FRDM-MCXA153 only: a stray black pixel appears on `TouchPaint`'s stroke when two overlapping-but-not-identical dots are drawn close together.** Not reproducible on UNO R3 or UNO R4 Minima with the identical sketch/library. Precisely isolated on real hardware but not yet root-caused:
+
+- Redrawing at the exact same position repeatedly (identical address window every time) never shows it.
+- Any drag -- however small -- does, on the trailing edge of the new dot nearest the previous one.
+- Ruled out: pixel-batching in `pushColor()`/`writePixels()` (reproduced identically with that reverted); the interpolation math added to keep strokes solid (reproduced with per-pixel-spaced interpolation, which is about as dense as it gets); `SPI.beginTransaction()` triggering a clock/mode switch between the touch and LCD devices (reproduced even with both forced to identical `SPISettings`, eliminating every `beginTransaction()`-driven reconfigure -- see [mcx-arduino-core#2](https://github.com/teddokano/mcx-arduino-core/issues/2), which was filed for a real inefficiency found along the way but turned out not to be this bug's cause).
+- Current mitigation (`TouchPaint.ino`'s `MIN_MOVE`): skip drawing entirely for sub-2px drag steps, since redrawing that close is visually redundant anyway. Reduces how often the artifact can trigger (fewer draws overall) but doesn't address whatever the actual trigger condition is, so it still appears, just less often.
+- Next step, not yet done: capture actual CS/DC/SCLK/MOSI waveforms on a logic analyzer for a "same position redrawn" (working) sample vs. a "moved 1-2px" (broken) sample, and compare -- reasoning from the software side alone has been exhausted without pinning down the exact mechanism.
+
 **LCD works, but touch is dead or wildly intermittent (comes and goes across power cycles) even with SB1/SB2/SB3 bridged:** before suspecting software, check the physical header contact for TP_IRQ/TP_CS -- on real UNO R3 hardware this turned out to be exactly that: a marginal pin/socket contact (dust in the header socket, a header pin not making firm contact) that behaved differently run to run, including working fine on some boots and not on others. Cleaning the socket and slightly bending the pin for a firmer contact fixed it outright, with zero code changes. Since the LCD is write-only and never exercises TP_IRQ, MISO, or TP_CS at all, it can look completely healthy while touch's marginal connection fails intermittently -- if touch behaves inconsistently across reboots/reseats, suspect the physical connection before the driver.
 
 ## Acknowledgements
