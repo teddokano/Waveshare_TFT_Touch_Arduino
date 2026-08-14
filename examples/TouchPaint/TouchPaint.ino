@@ -134,7 +134,15 @@ void loop(void)
 		float dx = (float)x - (float)lastX;
 		float dy = (float)y - (float)lastY;
 		float dist = sqrt(dx * dx + dy * dy);
-		uint16_t steps = (uint16_t)(dist / DOT_RADIUS);
+		// One interpolated dot per pixel of travel, not per DOT_RADIUS --
+		// fillCircle()'s integer-truncated sqrt() renders a circle
+		// slightly smaller than its nominal radius, so dots spaced
+		// exactly DOT_RADIUS apart (tried first) don't quite touch,
+		// leaving a faint but consistent gap the whole length of any
+		// stroke (confirmed on real hardware). Per-pixel spacing leaves
+		// a generous overlap margin; the extra fillCircle() calls this
+		// adds are cheap given how short a single drag step usually is.
+		uint16_t steps = (uint16_t)dist;
 		for (uint16_t i = 1; i < steps; i++) {
 			int16_t ix = lastX + (int16_t)(dx * i / steps);
 			int16_t iy = lastY + (int16_t)(dy * i / steps);
