@@ -67,14 +67,35 @@ void ST7789::writeData16(uint16_t data)
 // any larger would overflow it. 32 pixels = 64 bytes.
 static const uint32_t PIXEL_CHUNK = 32;
 
+// Below this many pixels, fall back to one SPI.transfer16() call per
+// pixel instead of a single short SPI.transfer(buf, count) burst.
+// Observed on real FRDM-MCXA153 hardware: very short buffer bursts (as
+// in a small fillCircle's 1-5 pixel row spans) rendered a consistent
+// thin gap that per-pixel transfer16() calls of the same pixels don't
+// -- root cause not fully isolated (suspected: how that core's LPSPI
+// driver frames/gaps a short multi-byte burst differs from several
+// single-byte ones in a way the panel's RAMWR pointer is sensitive
+// to), but confirmed large batched bursts (full-screen fills, a
+// radius-24 fillCircle) render correctly, so only short ones fall back.
+static const uint32_t SMALL_BURST_THRESHOLD = 8;
+
 void ST7789::pushColor(uint16_t color, uint32_t count)
 {
+	digitalWrite(_dcPin, HIGH);
+	digitalWrite(_csPin, LOW);
+
+	if (count < SMALL_BURST_THRESHOLD) {
+		for (uint32_t i = 0; i < count; i++) {
+			SPI.transfer16(color);
+		}
+		digitalWrite(_csPin, HIGH);
+		return;
+	}
+
 	uint8_t hi = (uint8_t)(color >> 8);
 	uint8_t lo = (uint8_t)(color & 0xFF);
 	uint8_t buf[PIXEL_CHUNK * 2];
 
-	digitalWrite(_dcPin, HIGH);
-	digitalWrite(_csPin, LOW);
 	while (count > 0) {
 		uint32_t n = count < PIXEL_CHUNK ? count : PIXEL_CHUNK;
 		// SPI.transfer(buf, ...) is in-place full-duplex -- it
@@ -295,10 +316,20 @@ void ST7789::startWrite(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 
 void ST7789::writePixels(const uint16_t *colors, uint32_t count)
 {
-	uint8_t buf[PIXEL_CHUNK * 2];
-
 	digitalWrite(_dcPin, HIGH);
 	digitalWrite(_csPin, LOW);
+
+	if (count < SMALL_BURST_THRESHOLD) {
+		// See pushColor() for why very short bursts avoid the batched
+		// SPI.transfer(buf, count) path.
+		for (uint32_t i = 0; i < count; i++) {
+			SPI.transfer16(colors[i]);
+		}
+		digitalWrite(_csPin, HIGH);
+		return;
+	}
+
+	uint8_t buf[PIXEL_CHUNK * 2];
 
 	uint32_t idx = 0;
 	while (idx < count) {
