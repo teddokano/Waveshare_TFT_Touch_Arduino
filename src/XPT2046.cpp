@@ -37,6 +37,19 @@ void XPT2046::begin(uint32_t spiHz)
 	pinMode(_irqPin, INPUT_PULLUP);
 
 	SPI.begin();
+
+	// Prime the touch-detect comparator: readRaw9()'s last command
+	// leaves PD1PD0=00 (power-down between conversions, IRQ enabled),
+	// the state PENIRQ needs to work at all. Whatever PD state the
+	// chip actually powers up in isn't guaranteed to already be that --
+	// observed on real hardware (two different boards/cores) as touch
+	// never registering after a true cold power-on, but working after
+	// a second power cycle, consistent with a leftover PD state from
+	// the previous session happening to already be right. Forcing it
+	// here removes the dependency on that. Result is discarded (likely
+	// garbage, since nothing is touching the panel during begin()).
+	uint16_t dx, dy, dz;
+	readRaw9(dx, dy, dz);
 }
 
 bool XPT2046::touched(void)
