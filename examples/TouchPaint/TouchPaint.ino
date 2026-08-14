@@ -19,17 +19,18 @@
  * What this sketch does:
  *   1. Draws the classic red/green/blue/grey corner test pattern so the
  *      LCD's orientation and RGB byte order can be checked at a glance.
- *   2. Enters a pressure-sensitive touch-paint loop: dragging a finger/
- *      stylus draws a dot whose radius grows with how hard you press
- *      (XPT2046's raw Z pressure reading), and touching the "CLEAR" bar
- *      at the top wipes the canvas. Screen position, raw pressure, and
- *      the radius it maps to are printed to Serial.
+ *   2. Enters a simple touch-paint loop: dragging a finger/stylus draws
+ *      fixed-radius dots on screen, and touching the "CLEAR" bar at the
+ *      top wipes the canvas. Screen position is printed to Serial.
  *
- *      MIN_Z/MAX_Z below are set from real light/firm touches measured
- *      on actual hardware (z~1000 light, z~1500 firm -- pressure range
- *      is quite narrow in practice, much tighter than the driver's
- *      z-threshold-to-max theoretical span) -- retune them to taste, or
- *      by watching the printed "z=" values on your own panel.
+ *      (A pressure-sensitive brush -- radius scaled from XPT2046's raw
+ *      Z reading -- was tried here and measured working, but Z turned
+ *      out to vary by screen location as well as by force on this
+ *      panel, e.g. reading noticeably lower near the top-left corner
+ *      even under a firm press. That positional bias makes Z alone an
+ *      unreliable stand-in for "how hard", so this sketch keeps a
+ *      fixed radius instead. XPT2046::getPoint(x, y, z, ...) is still
+ *      available if you want to experiment with it yourself.)
  */
 
 #include <Arduino.h>
@@ -41,13 +42,7 @@ ST7789 tft(D10, D7, D9);
 XPT2046 touch(D4, D3);
 
 static const uint16_t CLEAR_BAR_HEIGHT = 24;
-
-// Pressure-to-radius mapping; see the header comment for where these
-// numbers come from.
-static const uint16_t MIN_Z = 1000;  // light touch
-static const uint16_t MAX_Z = 1500;  // firm press
-static const uint16_t MIN_RADIUS = 1;
-static const uint16_t MAX_RADIUS = 8;
+static const uint16_t DOT_RADIUS = 2;
 
 static void drawCornerTestPattern(void)
 {
@@ -98,33 +93,27 @@ void setup(void)
 
 void loop(void)
 {
-	uint16_t x, y, z;
+	uint16_t x, y;
 
-	if (!touch.getPoint(x, y, z, tft.width(), tft.height())) {
+	if (!touch.getPoint(x, y, tft.width(), tft.height())) {
 		return;
 	}
-
-	uint16_t radius = constrain(map(z, MIN_Z, MAX_Z, MIN_RADIUS, MAX_RADIUS), MIN_RADIUS, MAX_RADIUS);
 
 	Serial.print("screen=(");
 	Serial.print(x);
 	Serial.print(",");
 	Serial.print(y);
-	Serial.print(")  z=");
-	Serial.print(z);
-	Serial.print("  r=");
-	Serial.println(radius);
+	Serial.println(")");
 
-	// Treat "close enough that the dot could overlap the bar" as a bar
+	// Treat "close enough that the dot would overlap the bar" as a bar
 	// touch too -- otherwise a dot centered just below the boundary
-	// still bleeds up into the bar, and since the bar itself is only
-	// ever drawn once at startup (never refreshed), that stray sliver
-	// stays there permanently, clear or not. Sized against MAX_RADIUS
-	// (not the current dot's radius) so the boundary never has to move.
-	if (y < CLEAR_BAR_HEIGHT + MAX_RADIUS) {
+	// still bleeds DOT_RADIUS pixels up into the bar, and since the bar
+	// itself is only ever drawn once at startup (never refreshed), that
+	// stray sliver stays there permanently, clear or not.
+	if (y < CLEAR_BAR_HEIGHT + DOT_RADIUS) {
 		tft.fillRect(0, CLEAR_BAR_HEIGHT, tft.width(), tft.height() - CLEAR_BAR_HEIGHT, ST7789_BLACK);
 		return;
 	}
 
-	tft.fillCircle(x, y, radius, ST7789_WHITE);
+	tft.fillCircle(x, y, DOT_RADIUS, ST7789_WHITE);
 }
