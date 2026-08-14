@@ -58,7 +58,7 @@ Board|Core|Compiles (CI)|Run on real hardware
 ---|---|---|---
 FRDM-MCXA153|[mcx-arduino-core](https://github.com/teddokano/mcx-arduino-core)|Yes, except `SDBitmapViewer`\*|`TouchPaint` only
 UNO R4 Minima|`arduino:renesas_uno`|Yes|`TouchPaint` only
-UNO R3|`arduino:avr`|Yes|`TouchPaint` (LCD + touch both confirmed working), `GraphicsPrimitivesDemo` (all four rotations confirmed correct)
+UNO R3|`arduino:avr`|Yes|`TouchPaint` (LCD + touch both confirmed working), `GraphicsPrimitivesDemo` (all four rotations confirmed correct), `TouchCalibration` (confirmed tracking accurately edge-to-edge)
 
 \* `SDBitmapViewer` doesn't currently compile against mcx-arduino-core: the standard `SD` library's low-level SdFat backend references bare `MOSI`/`MISO`/`SCK` pin macros that mcx-arduino-core doesn't define (it only provides prefixed equivalents like `SPI_MOSI`). That's a gap in the core itself, not in this library.
 
