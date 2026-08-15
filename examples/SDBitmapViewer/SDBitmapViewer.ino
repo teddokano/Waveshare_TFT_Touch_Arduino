@@ -53,6 +53,19 @@ static bool hasBmpExtension(const char *name)
 	return (e1 == 'b' || e1 == 'B') && (e2 == 'm' || e2 == 'M') && (e3 == 'p' || e3 == 'P');
 }
 
+// This library only sees the FAT 8.3 short name, never the real long
+// filename -- so macOS's per-file ".bmp"-suffixed metadata sidecars
+// (written as "._whatever.bmp" when copying onto a FAT/exFAT card,
+// e.g. from Finder) can't be told apart from real bitmaps by name
+// alone except for one reliable tell: the leading "." of "._" always
+// gets stripped by 8.3 mangling, leaving the short name starting with
+// the underscore that follows it. A real file starting with "_" would
+// false-positive here, but that's rare enough to accept.
+static bool looksLikeAppleDoubleFile(const char *name)
+{
+	return name[0] == '_';
+}
+
 static void scanBmpFiles(void)
 {
 	File dir = SD.open("/");
@@ -63,7 +76,7 @@ static void scanBmpFiles(void)
 		if (!entry) {
 			break;
 		}
-		if (!entry.isDirectory() && hasBmpExtension(entry.name())) {
+		if (!entry.isDirectory() && hasBmpExtension(entry.name()) && !looksLikeAppleDoubleFile(entry.name())) {
 			strncpy(bmpName[bmpCount], entry.name(), sizeof(bmpName[bmpCount]) - 1);
 			bmpName[bmpCount][sizeof(bmpName[bmpCount]) - 1] = '\0';
 			bmpCount++;
