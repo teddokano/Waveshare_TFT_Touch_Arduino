@@ -42,6 +42,8 @@ Type#|Header file|Interface|Notes
 [ST7789V](https://www.waveshare.com/2.8inch-tft-touch-shield.htm)|`ST7789.h`|SPI (mode 0, up to 24MHz)|240x320 LCD controller
 [XPT2046](https://www.waveshare.com/2.8inch-tft-touch-shield.htm)|`XPT2046.h`|SPI (mode 0, up to ~2MHz)|4-wire resistive touch controller, shares the LCD's SPI bus
 
+`ST7789.h` also declares a free `rgb565(r, g, b)` helper for building RGB565 color values from 8-bit-per-channel components (used internally by `SDBitmapViewer` to convert a BMP's 24-bit pixels).
+
 ## Getting started
 
 Copy (or `git clone`) this repository into your Arduino `libraries/` folder, then restart the Arduino IDE.
@@ -52,7 +54,7 @@ This library targets the standard Arduino API (`pinMode`/`digitalWrite`/`SPI`) a
 
 ### Build status
 
-Every example is compiled against all three boards below on each push via [`.github/workflows/compile-examples.yml`](.github/workflows/compile-examples.yml) (see the badge at the top of this file) -- this only proves the examples *compile*, not that they've been run on real hardware.
+Every example is compiled against all three boards below on each push via [`.github/workflows/compile-examples.yml`](.github/workflows/compile-examples.yml) (see the badge at the top of this file) -- this only proves the examples *compile*, not that they've been run on real hardware. All four examples also build warning-free (`arduino-cli --warnings all`) on all three boards, including `SDBitmapViewer` against a local mcx-arduino-core `0.3.0-dev` build (see the footnote below on why CI itself still excludes that one combination).
 
 Board|Core|Compiles (CI)|Run on real hardware
 ---|---|---|---
