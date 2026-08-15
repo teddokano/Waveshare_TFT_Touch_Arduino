@@ -45,16 +45,20 @@ jobs:
                 source-url: https://raw.githubusercontent.com/teddokano/mcx-arduino-core/main/package_nxp_mcx_index.json
             libraries: |
               - source-path: ./
-            # SDBitmapViewer is excluded here: the standard SD
-            # library's low-level SdFat backend references bare
-            # MOSI/MISO/SCK pin macros that mcx-arduino-core doesn't
-            # define (it only provides prefixed equivalents like
-            # SPI_MOSI) -- a gap in that core, not something to work
-            # around from this library.
+              - name: SD
             sketch-paths: |
-              - examples/TouchPaint
-              - examples/GraphicsPrimitivesDemo
-              - examples/TouchCalibration
+              - examples
+
+          - name: "FRDM-MCXN947 (nxp:mcx / mcx-arduino-core)"
+            fqbn: "nxp:mcx:frdm_mcxn947"
+            platforms: |
+              - name: nxp:mcx
+                source-url: https://raw.githubusercontent.com/teddokano/mcx-arduino-core/main/package_nxp_mcx_index.json
+            libraries: |
+              - source-path: ./
+              - name: SD
+            sketch-paths: |
+              - examples
 
     steps:
       - name: Checkout

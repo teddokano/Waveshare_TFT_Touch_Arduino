@@ -54,16 +54,16 @@ This library targets the standard Arduino API (`pinMode`/`digitalWrite`/`SPI`) a
 
 ### Build status
 
-Every example is compiled against all three boards below on each push via [`.github/workflows/compile-examples.yml`](.github/workflows/compile-examples.yml) (see the badge at the top of this file) -- this only proves the examples *compile*, not that they've been run on real hardware. All four examples also build warning-free (`arduino-cli --warnings all`) on all three boards, including `SDBitmapViewer` against a local mcx-arduino-core `0.3.0-dev` build (see the footnote below on why CI itself still excludes that one combination).
+Every example is compiled against all four boards below on each push via [`.github/workflows/compile-examples.yml`](.github/workflows/compile-examples.yml) (see the badge at the top of this file) -- this only proves the examples *compile*, not that they've been run on real hardware. All four examples also build warning-free (`arduino-cli --warnings all`) on every board.
 
 Board|Core|Compiles (CI)|Run on real hardware
 ---|---|---|---
-FRDM-MCXN947|[mcx-arduino-core](https://github.com/teddokano/mcx-arduino-core)|Not yet in CI matrix|`TouchPaint`, `GraphicsPrimitivesDemo`, `TouchCalibration`, `SDBitmapViewer` -- all four confirmed working
-FRDM-MCXA153|[mcx-arduino-core](https://github.com/teddokano/mcx-arduino-core)|Yes, except `SDBitmapViewer`\*|`TouchPaint` (LCD + touch confirmed working; fill/draw speed now matches UNO R3/R4 Minima after the pixel-batching fix), `SDBitmapViewer`
+FRDM-MCXN947|[mcx-arduino-core](https://github.com/teddokano/mcx-arduino-core)|Yes|`TouchPaint`, `GraphicsPrimitivesDemo`, `TouchCalibration`, `SDBitmapViewer` -- all four confirmed working
+FRDM-MCXA153|[mcx-arduino-core](https://github.com/teddokano/mcx-arduino-core)|Yes|`TouchPaint` (LCD + touch confirmed working; fill/draw speed now matches UNO R3/R4 Minima after the pixel-batching fix), `SDBitmapViewer`
 UNO R4 Minima|`arduino:renesas_uno`|Yes|`TouchPaint` (LCD + touch confirmed working, including a true 30s-cold-boot), `GraphicsPrimitivesDemo`, `TouchCalibration`, `SDBitmapViewer`
 UNO R3|`arduino:avr`|Yes|`TouchPaint` (LCD + touch confirmed working, including a true 30s-cold-boot), `GraphicsPrimitivesDemo` (all four rotations confirmed correct), `TouchCalibration` (confirmed tracking accurately edge-to-edge), `SDBitmapViewer` (SDHC/FAT32 card, listing + drawing + touch-to-advance all confirmed)
 
-\* `SDBitmapViewer` against mcx-arduino-core: both blockers found along the way -- bare `MOSI`/`MISO`/`SCK` pin macros the core didn't define ([mcx-arduino-core#1](https://github.com/teddokano/mcx-arduino-core/issues/1)) and a `Print` class missing `setWriteError()`/`getWriteError()`/`clearWriteError()` ([mcx-arduino-core#3](https://github.com/teddokano/mcx-arduino-core/issues/3)) -- are fixed and closed upstream, and compiling all four examples against a local `0.3.0-dev` build of the core (with `arduino-cli --warnings all`) is clean across the board. CI still shows `SDBitmapViewer` excluded for this board, though: the boards-manager index CI actually installs from still only publishes `0.1.0`, which predates both fixes. Re-enable it here once mcx-arduino-core cuts a release with them included. This is a CI-only gap -- `SDBitmapViewer` itself has been run and confirmed working on real FRDM-MCXA153 hardware (see the "Run on real hardware" column).
+`SDBitmapViewer` on the nxp:mcx boards needed two upstream mcx-arduino-core fixes -- bare `MOSI`/`MISO`/`SCK` pin macros the core didn't define ([mcx-arduino-core#1](https://github.com/teddokano/mcx-arduino-core/issues/1)) and a `Print` class missing `setWriteError()`/`getWriteError()`/`clearWriteError()` ([mcx-arduino-core#3](https://github.com/teddokano/mcx-arduino-core/issues/3)). Both are included in the now-published mcx-arduino-core [`0.3.0`](https://github.com/teddokano/mcx-arduino-core/releases/tag/0.3.0) release, so CI runs `SDBitmapViewer` on both FRDM-MCXA153 and FRDM-MCXN947 like every other example.
 
 ## What's inside?
 
