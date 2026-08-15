@@ -53,7 +53,6 @@ XPT2046 touch(D4, D3);
 
 static const uint16_t CLEAR_BAR_HEIGHT = 24;
 static const uint16_t DOT_RADIUS = 2;
-static const float MIN_MOVE = 2.0f; // minimum drag distance (px) before drawing again
 
 static void drawCornerTestPattern(void)
 {
@@ -135,18 +134,6 @@ void loop(void)
 		float dx = (float)x - (float)lastX;
 		float dy = (float)y - (float)lastY;
 		float dist = sqrt(dx * dx + dy * dy);
-
-		// Redrawing a dot only a pixel or two from the last one is both
-		// pointless (the previous dot already covers that spot) and,
-		// confirmed on real FRDM-MCXA153 hardware, triggers a small
-		// stray black pixel right on the seam between the two nearly-
-		// overlapping draws -- exact cause not isolated (a fixed
-		// position redrawn repeatedly never shows it; only a slight
-		// move to an adjacent-but-different position does), but simply
-		// not re-drawing such a tiny, redundant step sidesteps it.
-		if (dist < MIN_MOVE) {
-			return;
-		}
 
 		// One interpolated dot per pixel of travel, not per DOT_RADIUS --
 		// fillCircle()'s integer-truncated sqrt() renders a circle

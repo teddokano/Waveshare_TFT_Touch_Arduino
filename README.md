@@ -65,6 +65,8 @@ UNO R3|`arduino:avr`|Yes|`TouchPaint` (LCD + touch confirmed working, including 
 
 `SDBitmapViewer` on the nxp:mcx boards needed two upstream mcx-arduino-core fixes -- bare `MOSI`/`MISO`/`SCK` pin macros the core didn't define ([mcx-arduino-core#1](https://github.com/teddokano/mcx-arduino-core/issues/1)) and a `Print` class missing `setWriteError()`/`getWriteError()`/`clearWriteError()` ([mcx-arduino-core#3](https://github.com/teddokano/mcx-arduino-core/issues/3)). Both are included in the now-published mcx-arduino-core [`0.3.0`](https://github.com/teddokano/mcx-arduino-core/releases/tag/0.3.0) release, so CI runs `SDBitmapViewer` on both FRDM-MCXA153 and FRDM-MCXN947 like every other example.
 
+The same `0.3.0` release also resolved the FRDM-MCXA153 `TouchPaint` stray-black-pixel artifact previously tracked here as a known issue: the fix for [mcx-arduino-core#2](https://github.com/teddokano/mcx-arduino-core/issues/2) (lighter `LPSPI` reconfiguration on `SPI.beginTransaction()`, plus a CS-pin-hijacking fix) eliminated it, even though this library's own earlier test with both devices forced to identical `SPISettings` hadn't isolated it as the cause. Confirmed fixed on real hardware on both FRDM-MCXA153 and FRDM-MCXN947.
+
 ## What's inside?
 
 ### Examples
@@ -115,14 +117,6 @@ If your panel's raw range doesn't span close to the full `0..4095`, run the `Tou
 - **Copying `.bmp` files from macOS:** Finder (and even `cp`) leaves a `._whatever.bmp` metadata sidecar next to every real file, which -- because this library can only see the FAT 8.3 short name, never the true long filename -- shows up as something like `_BLAC~5.BMP`, still ending in `.bmp`. `SDBitmapViewer` filters these out by their leading underscore, but if you're inspecting the card's contents yourself, that's what they are. Copying via Terminal with `COPYFILE_DISABLE=1 cp *.bmp /Volumes/<card>/` avoids creating them in the first place (that env var only applies to that one command, not permanently).
 
 ## Known issues
-
-**FRDM-MCXA153 only: a stray black pixel appears on `TouchPaint`'s stroke when two overlapping-but-not-identical dots are drawn close together.** Not reproducible on UNO R3 or UNO R4 Minima with the identical sketch/library. Precisely isolated on real hardware but not yet root-caused:
-
-- Redrawing at the exact same position repeatedly (identical address window every time) never shows it.
-- Any drag -- however small -- does, on the trailing edge of the new dot nearest the previous one.
-- Ruled out: pixel-batching in `pushColor()`/`writePixels()` (reproduced identically with that reverted); the interpolation math added to keep strokes solid (reproduced with per-pixel-spaced interpolation, which is about as dense as it gets); `SPI.beginTransaction()` triggering a clock/mode switch between the touch and LCD devices (reproduced even with both forced to identical `SPISettings`, eliminating every `beginTransaction()`-driven reconfigure -- see [mcx-arduino-core#2](https://github.com/teddokano/mcx-arduino-core/issues/2), which was filed for a real inefficiency found along the way but turned out not to be this bug's cause).
-- Current mitigation (`TouchPaint.ino`'s `MIN_MOVE`): skip drawing entirely for sub-2px drag steps, since redrawing that close is visually redundant anyway. Reduces how often the artifact can trigger (fewer draws overall) but doesn't address whatever the actual trigger condition is, so it still appears, just less often.
-- Next step, not yet done: capture actual CS/DC/SCLK/MOSI waveforms on a logic analyzer for a "same position redrawn" (working) sample vs. a "moved 1-2px" (broken) sample, and compare -- reasoning from the software side alone has been exhausted without pinning down the exact mechanism.
 
 **LCD works, but touch is dead or wildly intermittent (comes and goes across power cycles) even with SB1/SB2/SB3 bridged:** before suspecting software, check the physical header contact for TP_IRQ/TP_CS -- on real UNO R3 hardware this turned out to be exactly that: a marginal pin/socket contact (dust in the header socket, a header pin not making firm contact) that behaved differently run to run, including working fine on some boots and not on others. Cleaning the socket and slightly bending the pin for a firmer contact fixed it outright, with zero code changes. Since the LCD is write-only and never exercises TP_IRQ, MISO, or TP_CS at all, it can look completely healthy while touch's marginal connection fails intermittently -- if touch behaves inconsistently across reboots/reseats, suspect the physical connection before the driver.
 
