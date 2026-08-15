@@ -47,6 +47,7 @@ Type#|Header file|Interface|Notes
 
 `ST7789.h` also declares a free `rgb565(r, g, b)` helper for building RGB565 color values from 8-bit-per-channel components (used internally by `SDBitmapViewer` to convert a BMP's 24-bit pixels).
 
+
 ## Getting started
 
 Copy (or `git clone`) this repository into your Arduino `libraries/` folder, then restart the Arduino IDE.
@@ -69,6 +70,11 @@ UNO R3|`arduino:avr`|Yes|`TouchPaint` (LCD + touch confirmed working, including 
 `SDBitmapViewer` on the nxp:mcx boards needed two upstream mcx-arduino-core fixes -- bare `MOSI`/`MISO`/`SCK` pin macros the core didn't define ([mcx-arduino-core#1](https://github.com/teddokano/mcx-arduino-core/issues/1)) and a `Print` class missing `setWriteError()`/`getWriteError()`/`clearWriteError()` ([mcx-arduino-core#3](https://github.com/teddokano/mcx-arduino-core/issues/3)). Both are included in the now-published mcx-arduino-core [`0.3.0`](https://github.com/teddokano/mcx-arduino-core/releases/tag/0.3.0) release, so CI runs `SDBitmapViewer` on both FRDM-MCXA153 and FRDM-MCXN947 like every other example.
 
 The same `0.3.0` release also resolved the FRDM-MCXA153 `TouchPaint` stray-black-pixel artifact previously tracked here as a known issue: the fix for [mcx-arduino-core#2](https://github.com/teddokano/mcx-arduino-core/issues/2) (lighter in-place `LPSPI` reconfiguration on `SPI.beginTransaction()`, instead of a full deinit+reinit on every clock/mode switch between interleaved devices) eliminated it, even though this library's own earlier test with both devices forced to identical `SPISettings` hadn't isolated it as the cause. Confirmed fixed on real hardware on both FRDM-MCXA153 and FRDM-MCXN947.
+
+![SDBitmapViewer](img/le_petit_prince.jpg)
+*examples/SDBitmapViewer is running on FRDM-MCXN947*
+
+
 
 ## What's inside?
 
