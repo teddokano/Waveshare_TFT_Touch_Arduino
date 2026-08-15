@@ -3,6 +3,9 @@
 
 Arduino driver for the [Waveshare 2.8inch TFT Touch Shield](https://www.waveshare.com/2.8inch-tft-touch-shield.htm) (SKU: 10684; Rev2.1: ST7789V LCD + XPT2046 resistive touch), Arduino Uno R3 shield form factor.
 
+![TouchPaint](img/TouchPaint.jpg)
+*examples/TouchPaint is running on FRDM-MCXA153*
+
 ## What is this?
 An Arduino library providing:
 - **`ST7789`** -- graphics primitives (fill/pixel/line/rect/circle) plus `startWrite()`/`writePixels()`/`endWrite()` for streaming arbitrary pixel data (e.g. a decoded image) to the shield's 240x320 ST7789V LCD
