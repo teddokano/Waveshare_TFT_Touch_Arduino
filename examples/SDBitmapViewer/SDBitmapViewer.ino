@@ -113,21 +113,48 @@ static bool readLE32(File &f, uint32_t &v)
 	return true;
 }
 
+// Re-walks the root directory via openNextFile() to (re-)open the
+// index'th BMP entry (same filter as scanBmpFiles()), leaving it open
+// in `out` on success. Deliberately not SD.open("/" + name): reopening
+// a file that way after it was already visited once via
+// openNextFile() reliably fails on this library/card combination even
+// though the name is correct and unchanged (confirmed on real
+// hardware) -- root cause not identified in the (quite old) bundled SD
+// library's internals, but walking via openNextFile() again, the same
+// way scanBmpFiles() itself successfully opens every entry, reliably
+// works, so that's what this uses instead of trusting the path-based
+// SD.open().
+static bool openBmpByIndex(uint8_t index, File &out)
+{
+	File dir = SD.open("/");
+	uint8_t seen = 0;
+
+	while (true) {
+		File entry = dir.openNextFile();
+		if (!entry) {
+			dir.close();
+			return false;
+		}
+		if (!entry.isDirectory() && hasBmpExtension(entry.name()) && !looksLikeAppleDoubleFile(entry.name())) {
+			if (seen == index) {
+				out = entry;
+				dir.close();
+				return true;
+			}
+			seen++;
+		}
+		entry.close();
+	}
+}
+
 // Draws a 24-bit uncompressed BMP file at (x0,y0), clipped to the
 // screen. Each row is read from SD and pushed to the LCD in small
 // chunks; every chunk opens its own short-lived LCD SPI transaction
 // so an SD read (its own SPI transaction on a different CS) never
 // gets interleaved with an open LCD one -- the two must not overlap
 // on a shared bus.
-static bool drawBmp(const char *path, int16_t x0, int16_t y0)
+static bool drawBmp(File &f, int16_t x0, int16_t y0)
 {
-	File f = SD.open(path);
-	if (!f) {
-		Serial.print("open failed: ");
-		Serial.println(path);
-		return false;
-	}
-
 	uint16_t sig;
 	uint32_t fileSize, reserved, dataOffset, headerSize;
 	uint32_t widthU, heightU;
@@ -203,13 +230,11 @@ static void showCurrentBmp(void)
 
 	tft.fillScreen(ST7789_BLACK);
 
-	char path[14];
-	path[0] = '/';
-	strcpy(path + 1, bmpName[bmpIndex]);
-
 	Serial.print("drawing ");
-	Serial.println(path);
-	if (!drawBmp(path, 0, 0)) {
+	Serial.println(bmpName[bmpIndex]);
+
+	File f;
+	if (!openBmpByIndex(bmpIndex, f) || !drawBmp(f, 0, 0)) {
 		tft.fillScreen(ST7789_RED); // visible failure indicator
 	}
 }
