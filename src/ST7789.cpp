@@ -198,7 +198,13 @@ void ST7789::setAddrWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 
 void ST7789::drawPixel(int16_t x, int16_t y, uint16_t color)
 {
-	if (x < 0 || y < 0 || x >= _width || y >= _height) {
+	// _width/_height are well within int16_t range (max 320), so this
+	// cast is always safe -- avoids comparing signed x/y directly
+	// against unsigned _width/_height (-Wsign-compare).
+	int16_t width = (int16_t)_width;
+	int16_t height = (int16_t)_height;
+
+	if (x < 0 || y < 0 || x >= width || y >= height) {
 		return;
 	}
 	SPI.beginTransaction(_spiSettings);
@@ -209,13 +215,22 @@ void ST7789::drawPixel(int16_t x, int16_t y, uint16_t color)
 
 void ST7789::fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color)
 {
-	if (x >= _width || y >= _height || w <= 0 || h <= 0) {
+	int16_t width = (int16_t)_width;
+	int16_t height = (int16_t)_height;
+
+	// Comparing against the signed width/height above (not _width/
+	// _height directly) matters here, not just for -Wsign-compare: x/y
+	// can still be negative at this point (clamped below), and a
+	// negative x/y compared against unsigned _width/_height would
+	// promote to a huge value and wrongly look "off-screen", returning
+	// early instead of being clamped.
+	if (x >= width || y >= height || w <= 0 || h <= 0) {
 		return;
 	}
 	if (x < 0) { w += x; x = 0; }
 	if (y < 0) { h += y; y = 0; }
-	if (x + w > _width)  { w = _width  - x; }
-	if (y + h > _height) { h = _height - y; }
+	if (x + w > width)  { w = width  - x; }
+	if (y + h > height) { h = height - y; }
 	if (w <= 0 || h <= 0) {
 		return;
 	}
