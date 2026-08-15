@@ -60,7 +60,7 @@ FRDM-MCXA153|[mcx-arduino-core](https://github.com/teddokano/mcx-arduino-core)|Y
 UNO R4 Minima|`arduino:renesas_uno`|Yes|`TouchPaint` (LCD + touch confirmed working, including a true 30s-cold-boot), `GraphicsPrimitivesDemo`, `TouchCalibration`, `SDBitmapViewer`
 UNO R3|`arduino:avr`|Yes|`TouchPaint` (LCD + touch confirmed working, including a true 30s-cold-boot), `GraphicsPrimitivesDemo` (all four rotations confirmed correct), `TouchCalibration` (confirmed tracking accurately edge-to-edge), `SDBitmapViewer` (SDHC/FAT32 card, listing + drawing + touch-to-advance all confirmed)
 
-\* `SDBitmapViewer` doesn't currently compile against mcx-arduino-core: the standard `SD` library's low-level SdFat backend references bare `MOSI`/`MISO`/`SCK` pin macros that mcx-arduino-core doesn't define (it only provides prefixed equivalents like `SPI_MOSI`). That's a gap in the core itself, not in this library.
+\* `SDBitmapViewer` doesn't currently compile against mcx-arduino-core. First blocker was the standard `SD` library's SdFat backend referencing bare `MOSI`/`MISO`/`SCK` pin macros the core didn't define ([mcx-arduino-core#1](https://github.com/teddokano/mcx-arduino-core/issues/1), now fixed); with that resolved, the next blocker is the core's `Print` class missing `setWriteError()`/`getWriteError()`/`clearWriteError()`, which `SD`'s `SdFile`/`File` both call ([mcx-arduino-core#3](https://github.com/teddokano/mcx-arduino-core/issues/3)). Both are gaps in the core itself, not in this library.
 
 ## What's inside?
 
