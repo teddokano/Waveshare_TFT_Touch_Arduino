@@ -74,7 +74,7 @@ The same `0.3.0` release also resolved the FRDM-MCXA153 `TouchPaint` stray-black
 Sketch|Feature
 ---|---
 `TouchPaint`|Draws the red/green/blue/grey corner test pattern (checks LCD orientation and RGB order at a glance), then a simple touch-paint loop that prints screen coordinates to Serial
-`SDBitmapViewer`|Lists 24-bit uncompressed BMP files on the shield's onboard microSD slot and draws them on the LCD; touch anywhere to show the next image. Needs the standard `SD` library (bundled with the Arduino IDE)
+`SDBitmapViewer`|Lists 24-bit uncompressed BMP files on the shield's onboard microSD slot and draws them on the LCD; touch anywhere to show the next image. Needs the standard `SD` library (bundled with the Arduino IDE). Automatically filters out the `._whatever.bmp` metadata sidecar files macOS (Finder, `cp`) leaves alongside real files when copying onto the card
 `GraphicsPrimitivesDemo`|Exercises every drawing primitive (fillRect/drawRect/lines/circles) and cycles through all four `setRotation()` orientations every few seconds -- a quick bring-up/visual-regression check, LCD only
 `TouchCalibration`|Guided wizard: touch four on-screen crosshairs and it prints a ready-to-paste `setCalibration()` call, auto-detecting axis swap/inversion instead of TouchPaint's hardcoded guesses
 
@@ -109,12 +109,6 @@ If your panel's raw range doesn't span close to the full `0..4095`, run the `Tou
 **On FRDM-MCXA153, LCD_CS (D10) writes report success but the panel never responds:** the same Zephyr bring-up found that this board's *default* SPI pin mux routes D10 to the LPSPI peripheral's own hardware chip-select function rather than plain GPIO -- with that mux in place, `digitalWrite()` on D10 has no effect on the physical pin at all, even though every SPI transfer and GPIO call reports success in software. This library hasn't hit that failure mode on mcx-arduino-core, but if LCD_CS ever seems to have "no effect" there, check whether D10 is muxed to hardware SPI CS instead of plain GPIO in the board's pin configuration.
 
 **`XPT2046::getPoint(x, y, z, ...)`'s Z pressure reading isn't a reliable stand-in for "how hard is this touch":** measured on real hardware, Z varies noticeably by screen location as well as by actual force -- e.g. reading distinctly lower near the top-left corner even under a firm press. A pressure-sensitive brush example built on it therefore drew visibly thinner lines in that corner regardless of how hard it was pressed. Z is still useful as a touch/no-touch gate (which is all `getRaw()`/`getPoint()` use it for internally), but don't rely on its absolute magnitude for anything position-independent without compensating for this per-panel.
-
-**`SDBitmapViewer`: `SD.begin()` fails, or succeeds but says "Could not find FAT16/FAT32 partition":** a few SD-card gotchas turned up bringing this example up on real hardware, worth ruling out in order:
-
-- **Card capacity over 32GB:** cards that size are SDXC-class, and the SD spec (and the official SD Association formatter) mandates **exFAT** for that tier -- there's no way to get genuine FAT32 on a card that large through standard tools. The bundled Arduino `SD` library doesn't support exFAT at all. Use a 32GB-or-smaller SDHC card formatted FAT32 instead; a BMP viewer doesn't need much capacity anyway.
-- **Formatted FAT32 but still not detected:** if the card was previously exFAT (e.g. you hit the point above first), a "quick" reformat can leave stale partition-table info behind. Use a full/"overwrite" format, not quick, when switching a card's filesystem type.
-- **Copying `.bmp` files from macOS:** Finder (and even `cp`) leaves a `._whatever.bmp` metadata sidecar next to every real file, which -- because this library can only see the FAT 8.3 short name, never the true long filename -- shows up as something like `_BLAC~5.BMP`, still ending in `.bmp`. `SDBitmapViewer` filters these out by their leading underscore, but if you're inspecting the card's contents yourself, that's what they are. Copying via Terminal with `COPYFILE_DISABLE=1 cp *.bmp /Volumes/<card>/` avoids creating them in the first place (that env var only applies to that one command, not permanently).
 
 ## Known issues
 
