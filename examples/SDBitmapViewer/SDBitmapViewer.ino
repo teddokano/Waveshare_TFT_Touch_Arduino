@@ -14,10 +14,7 @@
  *     shown in exactly that order. Paths can point into subfolders.
  *     (Extension is .JSN, not .JSON -- this sketch's SD library only
  *     supports 8.3 filenames, so a 4-character extension can't be
- *     opened at all; the file's content is still plain JSON.) See
- *     PLAYLIST.JSN alongside this .ino for a ready-to-copy sample --
- *     edit its paths to match your own SD card, then copy it to the
- *     card's root.
+ *     opened at all; the file's content is still plain JSON.)
  *   - Otherwise, every .bmp file in the card's root directory, in
  *     whatever order the FAT filesystem's directory entries happen to
  *     be in (usually the order they were written to the card) -- see
