@@ -2,23 +2,9 @@
  * SDBitmapViewer -- Waveshare_TFT_Touch library example
  *
  * Demo for the Waveshare 2.8inch TFT Touch Shield's onboard microSD
- * slot: lists 24-bit uncompressed BMP files, then draws them on the
- * LCD one at a time. Touch anywhere on the screen to show the next
- * image.
- *
- * Which files are shown, and in what order, comes from one of two
- * sources:
- *   - PLAYLIST_FILE ("/PLAYLIST.JSN") at the card's root, if present:
- *     a JSON array of BMP file paths, e.g.
- *       ["/PICS/SUNSET.BMP", "/LOGO.BMP", "/PICS/MOUNTAIN.BMP"]
- *     shown in exactly that order. Paths can point into subfolders.
- *     (Extension is .JSN, not .JSON -- this sketch's SD library only
- *     supports 8.3 filenames, so a 4-character extension can't be
- *     opened at all; the file's content is still plain JSON.)
- *   - Otherwise, every .bmp file in the card's root directory, in
- *     whatever order the FAT filesystem's directory entries happen to
- *     be in (usually the order they were written to the card) -- see
- *     scanBmpFiles() below.
+ * slot: lists 24-bit uncompressed BMP files in the card's root
+ * directory, then draws them on the LCD one at a time. Touch anywhere
+ * on the screen to show the next image.
  *
  * The SD slot shares the shield's single hardware SPI bus with the
  * LCD and touch controller (separate chip-selects, each idle high
@@ -30,6 +16,7 @@
  * BMP requirements: 24-bit uncompressed (BI_RGB) -- what most image
  * editors produce by default when exporting "24-bit bitmap". Images
  * up to 320x240 are supported; larger ones are clipped to the screen.
+ * Put one or more such .bmp files in the SD card's root directory.
  *
  * Uses the standard Arduino SD library (bundled with the IDE).
  */
@@ -42,22 +29,16 @@
 #include <string.h>
 
 static const uint8_t SD_CS = D5;
-static const uint8_t MAX_BMP_FILES = 10;
-static const uint8_t BMP_PATH_LEN = 28; // "/SUBFOLDER1/FILE.BMP"-sized -- kept
-                                         // down along with MAX_BMP_FILES since
-                                         // bmpName[][] is the biggest single
-                                         // consumer of AVR's 2KB of RAM
+static const uint8_t MAX_BMP_FILES = 16;
 static const uint8_t CHUNK_PIXELS = 32; // small on purpose: keeps RAM
                                          // usage safe on 2KB AVR boards
-static const char PLAYLIST_FILE[] = "/PLAYLIST.JSN";
 
 ST7789  tft(D10, D7, D9);
 XPT2046 touch(D4, D3);
 
-char  bmpName[MAX_BMP_FILES][BMP_PATH_LEN];
+char  bmpName[MAX_BMP_FILES][13];
 uint8_t bmpCount = 0;
 uint8_t bmpIndex = 0;
-bool usingPlaylist = false;
 
 // Avoids strcasecmp()/strcasestr() -- not reliably available across
 // AVR (avr-libc) and ARM (newlib) Arduino cores without extra
@@ -105,75 +86,11 @@ static void scanBmpFiles(void)
 	dir.close();
 
 	Serial.print(bmpCount);
-	Serial.println(" BMP file(s) found (directory order):");
+	Serial.println(" BMP file(s) found:");
 	for (uint8_t i = 0; i < bmpCount; i++) {
 		Serial.print("  ");
 		Serial.println(bmpName[i]);
 	}
-}
-
-// Minimal, hand-rolled parser for PLAYLIST_FILE: reads a top-level
-// JSON array of quoted path strings straight off the SD card one
-// character at a time (no whole-file buffer, no library dependency --
-// keeps this safe on 2KB-RAM AVR boards). Only "\\" and "\"" escapes
-// are recognized; anything else after a backslash is taken literally.
-// Not a general JSON parser -- deliberately just enough for this
-// sketch's own array-of-strings format.
-static bool parsePlaylist(void)
-{
-	File f = SD.open(PLAYLIST_FILE);
-	if (!f) {
-		return false;
-	}
-
-	bmpCount = 0;
-	bool inString = false;
-	char buf[BMP_PATH_LEN];
-	uint8_t len = 0;
-
-	while (f.available() && bmpCount < MAX_BMP_FILES) {
-		char c = f.read();
-
-		if (!inString) {
-			if (c == '"') {
-				inString = true;
-				len = 0;
-			}
-			continue;
-		}
-
-		if (c == '\\' && f.available()) {
-			c = f.read(); // literal-escape only, see comment above
-		} else if (c == '"') {
-			inString = false;
-			buf[len] = '\0';
-			if (len > 0) {
-				strncpy(bmpName[bmpCount], buf, BMP_PATH_LEN - 1);
-				bmpName[bmpCount][BMP_PATH_LEN - 1] = '\0';
-				bmpCount++;
-			}
-			continue;
-		}
-
-		if (len < BMP_PATH_LEN - 1) {
-			buf[len++] = c;
-		}
-	}
-	f.close();
-
-	if (bmpCount == 0) {
-		return false; // empty or unparseable -- caller falls back to scanBmpFiles()
-	}
-
-	Serial.print(bmpCount);
-	Serial.print(" BMP file(s) from ");
-	Serial.print(PLAYLIST_FILE);
-	Serial.println(":");
-	for (uint8_t i = 0; i < bmpCount; i++) {
-		Serial.print("  ");
-		Serial.println(bmpName[i]);
-	}
-	return true;
 }
 
 static bool readLE16(File &f, uint16_t &v)
@@ -206,10 +123,7 @@ static bool readLE32(File &f, uint32_t &v)
 // library's internals, but walking via openNextFile() again, the same
 // way scanBmpFiles() itself successfully opens every entry, reliably
 // works, so that's what this uses instead of trusting the path-based
-// SD.open(). Only used for the directory-scan path -- playlist mode
-// opens files straight from their JSON-given path instead (see
-// showCurrentBmp()), since those names were never touched by
-// openNextFile() in the first place and so don't hit this bug.
+// SD.open().
 static bool openBmpByIndex(uint8_t index, File &out)
 {
 	File dir = SD.open("/");
@@ -320,15 +234,7 @@ static void showCurrentBmp(void)
 	Serial.println(bmpName[bmpIndex]);
 
 	File f;
-	bool opened;
-	if (usingPlaylist) {
-		f = SD.open(bmpName[bmpIndex]);
-		opened = f;
-	} else {
-		opened = openBmpByIndex(bmpIndex, f);
-	}
-
-	if (!opened || !drawBmp(f, 0, 0)) {
+	if (!openBmpByIndex(bmpIndex, f) || !drawBmp(f, 0, 0)) {
 		tft.fillScreen(ST7789_RED); // visible failure indicator
 	}
 }
@@ -351,10 +257,7 @@ void setup(void)
 		return;
 	}
 
-	usingPlaylist = parsePlaylist();
-	if (!usingPlaylist) {
-		scanBmpFiles();
-	}
+	scanBmpFiles();
 	showCurrentBmp();
 }
 
