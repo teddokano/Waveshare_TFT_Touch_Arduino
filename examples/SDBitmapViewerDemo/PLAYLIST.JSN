@@ -1,0 +1,13 @@
+{
+  "playlist": [
+    "/LOGO.BMP",
+    "/PICS/SUNSET.BMP",
+    "/PICS/MOUNTAIN.BMP"
+  ],
+  "saver": [
+    "/PICS/SUNSET.BMP",
+    "/PICS/MOUNTAIN.BMP"
+  ],
+  "idle_ms": 60000,
+  "interval_ms": 5000
+}

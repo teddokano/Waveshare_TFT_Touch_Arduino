@@ -25,8 +25,14 @@ jobs:
             libraries: |
               - source-path: ./
               - name: SD
+            # Listed one by one rather than as "examples": SDBitmapViewerDemo
+            # is FRDM-MCXA153/N947 only and stops with an #error anywhere
+            # else, by design.
             sketch-paths: |
-              - examples
+              - examples/TouchPaint
+              - examples/GraphicsPrimitivesDemo
+              - examples/TouchCalibration
+              - examples/SDBitmapViewer
 
           - name: "UNO R4 Minima (arduino:renesas_uno)"
             fqbn: "arduino:renesas_uno:minima"
@@ -35,8 +41,14 @@ jobs:
             libraries: |
               - source-path: ./
               - name: SD
+            # Listed one by one rather than as "examples": SDBitmapViewerDemo
+            # is FRDM-MCXA153/N947 only and stops with an #error anywhere
+            # else, by design.
             sketch-paths: |
-              - examples
+              - examples/TouchPaint
+              - examples/GraphicsPrimitivesDemo
+              - examples/TouchCalibration
+              - examples/SDBitmapViewer
 
           - name: "FRDM-MCXA153 (nxp:mcx / mcx-arduino-core)"
             fqbn: "nxp:mcx:frdm_mcxa153"
