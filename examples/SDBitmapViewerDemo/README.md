@@ -1,5 +1,7 @@
 # SDBitmapViewerDemo
 
+English | [日本語](README.ja.md)
+
 A touch-driven photo viewer for the [Waveshare 2.8inch TFT Touch Shield](https://www.waveshare.com/2.8inch-tft-touch-shield.htm) (SKU: 10684). It shows 24-bit BMP files from the shield's microSD slot, driven by tap, swipe and long press, and falls back to a screen saver when left alone.
 
 This is the elaborate sibling of [`SDBitmapViewer`](../SDBitmapViewer). That one is the portable example and runs on every board this library supports; this one targets **FRDM-MCXA153 and FRDM-MCXN947 only** and spends RAM freely to keep transitions quick. Building it for anything else stops with a clear `#error`.
@@ -23,15 +25,20 @@ Without a `/PLAYLIST.JSN` the sketch simply shows every `.bmp` in the card's roo
 
 ## Controls
 
-| Gesture | Effect |
-| --- | --- |
-| Tap | Next image |
-| Swipe left | Next image |
-| Swipe right | Previous image |
-| Long press (hold still ~0.6s) | Back to the first image |
-| Any touch during the screen saver | Returns to the image you were on |
+| Gesture | Landscape (default) | Portrait (`"portrait": true`) |
+| --- | --- | --- |
+| Touch upper half | — | Next image, wiping downwards |
+| Touch lower half | — | Previous image, wiping upwards |
+| Tap | Next image | (position decides, see above) |
+| Swipe | Left = next, right = previous | Not used |
+| Long press (hold still ~0.6s) | Back to the first image | Back to the first image |
+| Any touch during the screen saver | Returns to the image you were on | Returns to the image you were on |
 
-A swipe has to travel at least 20px and be more horizontal than vertical; anything shorter counts as a tap. The long press fires while your finger is still down, without waiting for you to lift it, and only if the touch stays within 10px of where it started.
+In landscape a swipe has to travel at least 20px and be more horizontal than vertical; anything shorter counts as a tap.
+
+The long press fires while your finger is still down, without waiting for you to lift it, and only if the touch stays within 10px of where it started.
+
+**Portrait mode** is for holding the board on its side. Only the touch handling changes: a touch is read by *where* it landed rather than which way it moved, since flicking along the panel's long axis is awkward with the board turned. Touch the top half and the next picture wipes in downwards; touch the bottom half and the previous one wipes in upwards. Swipes are not read at all in this mode, and the wipe direction comes from the gesture rather than the alternating default. The panel itself is still driven in landscape, since the sketch has no way of knowing which way round you are holding the board, so the pictures are not rotated for you.
 
 The touch that wakes the screen saver only wakes it — the tap or swipe it belongs to is discarded rather than also acted on, so you never overshoot by one image.
 
@@ -44,7 +51,9 @@ One file at the card's root holds everything:
   "playlist":    ["/LOGO.BMP", "/PICS/SUNSET.BMP", "/PICS/MOUNTAIN.BMP"],
   "saver":       ["/PICS/SUNSET.BMP", "/PICS/MOUNTAIN.BMP"],
   "idle_ms":     60000,
-  "interval_ms": 5000
+  "interval_ms": 5000,
+  "portrait":    false,
+  "reverse":     false
 }
 ```
 
@@ -54,6 +63,8 @@ One file at the card's root holds everything:
 | `saver` | Images the screen saver cycles through | The screen saver never starts |
 | `idle_ms` | How long untouched before the saver starts | 60000 (60s) |
 | `interval_ms` | How long each saver image stays up | 5000 (5s) |
+| `portrait` | `true` switches to touch-by-position for holding the board on its side | `false` |
+| `reverse` | `true` shows every list back to front | `false` |
 
 Paths may point into subfolders and are shown in exactly the order written. Up to 32 entries, each up to 39 characters.
 
@@ -63,8 +74,10 @@ A file containing nothing but a bare array is still accepted and read as the pla
 
 ### Editing tips
 
+- A member that is missing, or whose value is malformed, simply leaves that setting at its default, so a card written without the newer members keeps behaving exactly as it did. The startup serial output tells you what is actually in force.
 - While trying the screen saver out, set `idle_ms` to something like `5000` so you are not waiting a minute each time.
-- The parser looks up a member by name and reads what follows, so it is not a full JSON parser: a *path* that happened to be exactly `"playlist"`, `"saver"`, `"idle_ms"` or `"interval_ms"` would confuse it. Real paths never are.
+- `reverse` applies to the screen saver and the directory-scan fallback too, not just the playlist, so the setting means the same thing wherever the pictures came from.
+- The parser looks up a member by name and reads what follows, so it is not a full JSON parser: a *path* that happened to be exactly one of the member names would confuse it. Real paths never are.
 - On macOS, copying with Finder leaves a `._name.bmp` metadata file beside each real one. The sketch filters these out on its own, but that is what they are if you go looking at the card.
 
 ## Serial output
@@ -76,7 +89,9 @@ At 115200 baud you get the list that was loaded, the settings in force, and a li
   /LOGO.BMP
   /PICS/SUNSET.BMP
   /PICS/MOUNTAIN.BMP
+landscape mode: swipe left / right
 screen saver after 60000 ms, advancing every 5000 ms
+list order: as written
 drawing /LOGO.BMP
   top-down, 118 ms
 tap
@@ -110,7 +125,7 @@ The direction alternates with the image index, so consecutive pictures wipe oppo
 | Setting | Default | Effect |
 | --- | --- | --- |
 | `DRAW_BOTTOM_UP` | `false` | Which way even-numbered images go; odd ones take the other |
-| `SWIPE_WIPES_SIDEWAYS` | `false` | When true, a swipe wipes sideways in the direction your finger went instead of vertically |
+| `SWIPE_WIPES_SIDEWAYS` | `false` | When true, a swipe wipes the way your finger went rather than taking the alternating default — sideways in landscape, up or down in portrait |
 
 Sideways wiping costs very different amounts on the two boards, which is what the timing in the serial output is for:
 
@@ -137,7 +152,7 @@ Constants at the top of the sketch, beyond the two transition settings above:
 | --- | --- | --- |
 | `MAX_BMP_FILES` | 32 | Entries a list may hold |
 | `BMP_PATH_LEN` | 40 | Longest path, including the terminator |
-| `SWIPE_THRESHOLD` | 20 | Pixels of travel before a drag counts as a swipe |
+| `SWIPE_THRESHOLD` | 20 | Pixels of travel along the swipe axis before a drag counts as a swipe |
 | `LONG_PRESS_MS` | 600 | How long a still touch becomes a long press |
 | `LONG_PRESS_TOLERANCE` | 10 | Pixels a long press may drift and still count |
 | `CHUNK_PIXELS` | 64 | Pixels per SD read / LCD burst when drawing straight from the card |

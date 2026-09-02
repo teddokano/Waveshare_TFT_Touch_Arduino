@@ -19,10 +19,10 @@
  *     always did: shows the next image.
  *   - Move at least SWIPE_THRESHOLD px, mostly horizontally -> counted
  *     as a swipe: left shows the next image, right shows the previous
- *     one. With SWIPE_WIPES_SIDEWAYS set, a swipe also wipes sideways in
- *     the direction the finger went; clear it and every transition wipes
- *     vertically instead -- see DRAW_BOTTOM_UP. The time each draw takes
- *     is printed either way, which is what makes the two comparable.
+ *     one. With SWIPE_WIPES_SIDEWAYS set, a swipe also wipes sideways
+ *     the way the finger went; clear it and every transition wipes
+ *     vertically -- see DRAW_BOTTOM_UP. The time each draw takes is
+ *     printed either way, which makes them comparable.
  *   - A touch that stays within LONG_PRESS_TOLERANCE of where it
  *     started for LONG_PRESS_MS, without waiting for release, counts
  *     as a long press: jumps back to the first image.
@@ -40,14 +40,23 @@
  *     "playlist":    ["/LOGO/COLOR.BMP", "/PICS/SUNSET.BMP"],
  *     "saver":       ["/PICS/MOUNTAIN.BMP"],
  *     "idle_ms":     60000,
- *     "interval_ms": 5000
+ *     "interval_ms": 5000,
+ *     "portrait":    false,
+ *     "reverse":     false
  *   }
  *
  * Shown in exactly that order; paths can point into subfolders. Leave
  * out "saver" and the screen saver simply never starts. "idle_ms" is
  * how long the screen must go untouched before it starts and
  * "interval_ms" how long each picture stays up once it has; drop either
- * and the built-in IDLE_TIMEOUT_MS / SAVER_INTERVAL_MS applies. A file holding
+ * and the built-in IDLE_TIMEOUT_MS / SAVER_INTERVAL_MS applies.
+ * "portrait" is for holding the board on its side: a touch is then read
+ * by where it landed rather than which way it moved -- the top half
+ * brings in the next picture wiping downwards, the bottom half the
+ * previous one wiping upwards, and swipes stop being read at all. The
+ * panel is still driven in landscape, so the pictures themselves are not
+ * rotated. "reverse" turns every list round -- playlist, screen saver
+ * and directory scan alike. A file holding
  * nothing but a bare array is still read as the playlist, so cards
  * written for the earlier one-list-per-file layout keep working.
  * (Extension is .JSN, not .JSON -- this sketch's SD library only
@@ -172,6 +181,17 @@ PaintDir paintDir   = PAINT_TOP_DOWN; // direction for the image being shown now
 PaintDir pendingDir = PAINT_AUTO;     // one-shot request from the gesture, if any
 // Start at the built-in defaults; PLAYLIST_FILE overrides either one if
 // it names it.
+// Only the touch handling changes in portrait mode -- the panel is still
+// driven in landscape, since the sketch has no way to know which way
+// round the board is being held. What differs is that a touch is read by
+// where it landed rather than which way it moved.
+bool portraitMode = false;
+
+// Applies to every list the sketch builds -- playlist, screen saver and
+// the directory scan alike -- so the setting means the same thing
+// wherever the pictures came from.
+bool reverseOrder = false;
+
 unsigned long idleTimeoutMs   = IDLE_TIMEOUT_MS;
 unsigned long saverIntervalMs = SAVER_INTERVAL_MS;
 
@@ -224,6 +244,7 @@ static void scanBmpFiles(void)
 		entry.close();
 	}
 	dir.close();
+	applyOrder();
 
 	Serial.print(bmpCount);
 	Serial.println(F(" BMP file(s) found (directory order):"));
@@ -248,6 +269,8 @@ static void scanBmpFiles(void)
 static const char KEY_PLAYLIST[] = "playlist";
 static const char KEY_SAVER[]    = "saver";
 static const char KEY_IDLE[]     = "idle_ms";
+static const char KEY_PORTRAIT[] = "portrait";
+static const char KEY_REVERSE[]  = "reverse";
 static const char KEY_INTERVAL[] = "interval_ms";
 
 // Reads the next double-quoted string into buf. False at end of file.
@@ -323,32 +346,15 @@ static void collectArray(File &f)
 	}
 }
 
-// Reads a plain integer member out of PLAYLIST_FILE. Only whitespace and
-// the colon may sit between the name and its digits, so a member whose
-// value is a string or an array is rejected rather than having a number
-// picked out of whatever follows it.
-static bool loadNumber(const char *key, unsigned long *out)
+// Reads the value sitting at the current position: only whitespace and
+// the colon may come before it, so a member whose value is the wrong
+// shape is rejected rather than having something picked out of whatever
+// follows it.
+static bool readNumberValue(File &f, unsigned long *out)
 {
-	File f = SD.open(PLAYLIST_FILE);
-	if (!f) {
-		return false;
-	}
-
-	char name[16];
-	bool found = false;
-	while (nextString(f, name, sizeof(name))) {
-		if (strcmp(name, key) == 0) {
-			found = true;
-			break;
-		}
-	}
-	if (!found) {
-		f.close();
-		return false;
-	}
-
 	unsigned long v = 0;
 	bool anyDigit = false;
+
 	while (f.available()) {
 		char c = f.read();
 
@@ -358,20 +364,80 @@ static bool loadNumber(const char *key, unsigned long *out)
 			continue;
 		}
 		if (anyDigit) {
-			break;                  // number complete
+			break;
 		}
 		if (c == ':' || c == ' ' || c == '\t' || c == '\r' || c == '\n') {
-			continue;               // still on the way to the value
+			continue;
 		}
-		break;                      // value is not a plain number
+		break;
 	}
-	f.close();
 
 	if (!anyDigit) {
 		return false;
 	}
 	*out = v;
 	return true;
+}
+
+static bool readFlagValue(File &f, bool *out)
+{
+	while (f.available()) {
+		char c = f.read();
+
+		if (c == ':' || c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+			continue;
+		}
+		if (c == 't' || c == 'T' || c == 'f' || c == 'F') {
+			*out = (c == 't' || c == 'T');
+			return true;
+		}
+		break;
+	}
+	return false;
+}
+
+// All three scalar settings in a single pass over a single open file.
+// Reopening PLAYLIST_FILE once per member looked tidier but did not
+// survive contact with the bundled SD library, which is unreliable about
+// handing back the same path repeatedly -- the fourth open came back
+// empty and the last setting read silently kept its default. Walking the
+// file once is both more robust and less work.
+// Called wherever a list has just been filled, so "reverse" applies to
+// the screen saver and the directory scan as well as the playlist.
+static void applyOrder(void)
+{
+	if (!reverseOrder || bmpCount < 2) {
+		return;
+	}
+
+	for (uint8_t i = 0, j = (uint8_t)(bmpCount - 1); i < j; i++, j--) {
+		char tmp[BMP_PATH_LEN];
+		memcpy(tmp, bmpName[i], BMP_PATH_LEN);
+		memcpy(bmpName[i], bmpName[j], BMP_PATH_LEN);
+		memcpy(bmpName[j], tmp, BMP_PATH_LEN);
+	}
+}
+
+static void loadSettings(void)
+{
+	File f = SD.open(PLAYLIST_FILE);
+	if (!f) {
+		return;
+	}
+
+	char name[16];
+	while (nextString(f, name, sizeof(name))) {
+		if (strcmp(name, KEY_IDLE) == 0) {
+			readNumberValue(f, &idleTimeoutMs);
+		} else if (strcmp(name, KEY_INTERVAL) == 0) {
+			readNumberValue(f, &saverIntervalMs);
+		} else if (strcmp(name, KEY_PORTRAIT) == 0) {
+			readFlagValue(f, &portraitMode);
+		} else if (strcmp(name, KEY_REVERSE) == 0) {
+			readFlagValue(f, &reverseOrder);
+		}
+	}
+	f.close();
 }
 
 static bool loadList(const char *key)
@@ -438,6 +504,7 @@ static bool loadList(const char *key)
 	if (bmpCount == 0) {
 		return false;
 	}
+	applyOrder();
 
 	Serial.print(bmpCount);
 	Serial.print(F(" BMP file(s) from \""));
@@ -814,15 +881,20 @@ void setup(void)
 
 	logEvent(F("---- restart ----"), nullptr);
 
+	// Settings first: "reverse" has to be known before any list is built.
+	loadSettings();
+
 	loadNormalList();
 
-	loadNumber(KEY_IDLE, &idleTimeoutMs);
-	loadNumber(KEY_INTERVAL, &saverIntervalMs);
+	Serial.println(portraitMode ? F("portrait mode: touch upper / lower half")
+	                            : F("landscape mode: swipe left / right"));
 	Serial.print(F("screen saver after "));
 	Serial.print(idleTimeoutMs);
 	Serial.print(F(" ms, advancing every "));
 	Serial.print(saverIntervalMs);
 	Serial.println(F(" ms"));
+	Serial.println(reverseOrder ? F("list order: reversed")
+	                            : F("list order: as written"));
 
 	lastEventMs = millis();
 	showCurrentBmp();
@@ -908,7 +980,26 @@ void loop(void)
 	int16_t dx = (int16_t)lastX - (int16_t)startX;
 	int16_t dy = (int16_t)lastY - (int16_t)startY;
 
-	if (abs(dx) >= SWIPE_THRESHOLD && abs(dx) >= abs(dy)) {
+	if (portraitMode) {
+		// Portrait: where the touch landed decides, not which way it
+		// moved -- the board is being held on its side, so a flick along
+		// the panel's long axis is an awkward gesture. Touch the top half
+		// and the next picture wipes in downwards; touch the bottom half
+		// and the previous one wipes in upwards. The wipe direction is
+		// part of the gesture here, so it is set either way rather than
+		// only under SWIPE_WIPES_SIDEWAYS.
+		bool upper = (startY < (uint16_t)(tft.height() / 2));
+
+		if (upper) {
+			bmpIndex = (bmpIndex + 1) % bmpCount;
+			pendingDir = PAINT_TOP_DOWN;
+		} else {
+			bmpIndex = (bmpIndex + bmpCount - 1) % bmpCount;
+			pendingDir = PAINT_BOTTOM_UP;
+		}
+		Serial.println(upper ? F("touch upper -> next, wiping down")
+		                     : F("touch lower -> previous, wiping up"));
+	} else if (abs(dx) >= SWIPE_THRESHOLD && abs(dx) >= abs(dy)) {
 		// horizontal swipe: left -> next, right -> previous
 		if (dx < 0) {
 			bmpIndex = (bmpIndex + 1) % bmpCount;

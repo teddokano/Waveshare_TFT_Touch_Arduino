@@ -9,5 +9,7 @@
     "/PICS/MOUNTAIN.BMP"
   ],
   "idle_ms": 60000,
-  "interval_ms": 5000
+  "interval_ms": 5000,
+  "portrait": false,
+  "reverse": false
 }

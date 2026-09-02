@@ -1,4 +1,7 @@
 # Waveshare_TFT_Touch_Arduino
+
+English | [日本語](README.ja.md)
+
 [![Compile examples](https://github.com/teddokano/Waveshare_TFT_Touch_Arduino/actions/workflows/compile-examples.yml/badge.svg)](https://github.com/teddokano/Waveshare_TFT_Touch_Arduino/actions/workflows/compile-examples.yml)
 
 Arduino driver for the [Waveshare 2.8inch TFT Touch Shield](https://www.waveshare.com/2.8inch-tft-touch-shield.htm) (SKU: 10684; Rev2.1: ST7789V LCD + XPT2046 resistive touch), Arduino Uno R3 shield form factor.
