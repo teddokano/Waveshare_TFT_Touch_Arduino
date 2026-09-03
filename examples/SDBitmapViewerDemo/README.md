@@ -31,7 +31,8 @@ Without a `/PLAYLIST.JSN` the sketch simply shows every `.bmp` in the card's roo
 | Touch lower half | — | Previous image, wiping upwards |
 | Tap | Next image | (position decides, see above) |
 | Swipe | Left = next, right = previous | Not used |
-| Long press (hold still ~0.6s) | Back to the first image | Back to the first image |
+| Long press (hold still ~0.6s) | Opens the gallery | Opens the gallery |
+| Touch, with the gallery up | Jumps to that thumbnail | Jumps to that thumbnail |
 | Any touch during the screen saver | Returns to the image you were on | Returns to the image you were on |
 
 In landscape a swipe has to travel at least 20px and be more horizontal than vertical; anything shorter counts as a tap.
@@ -41,6 +42,21 @@ The long press fires while your finger is still down, without waiting for you to
 **Portrait mode** is for holding the board on its side. Only the touch handling changes: a touch is read by *where* it landed rather than which way it moved, since flicking along the panel's long axis is awkward with the board turned. Touch the top half and the next picture wipes in downwards; touch the bottom half and the previous one wipes in upwards. Swipes are not read at all in this mode, and the wipe direction comes from the gesture rather than the alternating default. The panel itself is still driven in landscape, since the sketch has no way of knowing which way round you are holding the board, so the pictures are not rotated for you.
 
 The touch that wakes the screen saver only wakes it — the tap or swipe it belongs to is discarded rather than also acted on, so you never overshoot by one image.
+
+### The gallery
+
+A long press replaces the picture with a 3x3 grid of the first nine images in the list, drawn as thumbnails. Touch one and it opens full screen; touch a cell with no picture behind it and nothing happens. Anything else that draws a picture — SW2/SW3, the screen saver starting — leaves the gallery as well.
+
+Each cell is 106x80 with a 2px gutter, and a thumbnail is scaled to fit inside it without distorting, centred in whatever it does not fill. A cell whose file will not open or decode is filled red, the same as a failed full-screen draw.
+
+Building the grid reads only the rows that land on a destination row and seeks straight past the rest, so at the 1/3 scale a 3x3 grid works out to, the whole thing costs about three full-screen draws rather than nine. The time it took is printed:
+
+```
+long press -> gallery
+  gallery of 9 in 412 ms
+```
+
+In portrait mode the grid is still drawn the way the panel is driven, so with the board turned it reads down the columns rather than across the rows. Cells are picked by where you touch either way.
 
 ### The board's buttons
 
@@ -182,6 +198,8 @@ Constants at the top of the sketch, beyond the two transition settings above:
 | `SWIPE_THRESHOLD` | 20 | Pixels of travel along the swipe axis before a drag counts as a swipe |
 | `LONG_PRESS_MS` | 600 | How long a still touch becomes a long press |
 | `LONG_PRESS_TOLERANCE` | 10 | Pixels a long press may drift and still count |
+| `GALLERY_COLS` / `GALLERY_ROWS` | 3 / 3 | Grid the long press opens; the cell size follows from these |
+| `GALLERY_GUTTER` | 2 | Pixels of background left between thumbnails |
 | `MULTI_CLICK_MS` | 400 | How long after an SW2/SW3 click another one still joins the same count |
 | `BUTTON_DEBOUNCE_MS` | 25 | How long an SW2/SW3 edge must settle to be believed |
 | `CHUNK_PIXELS` | 64 | Pixels per SD read / LCD burst when drawing straight from the card |

@@ -25,7 +25,9 @@
  *     printed either way, which makes them comparable.
  *   - A touch that stays within LONG_PRESS_TOLERANCE of where it
  *     started for LONG_PRESS_MS, without waiting for release, counts
- *     as a long press: jumps back to the first image.
+ *     as a long press: opens a 3x3 gallery of the first nine pictures,
+ *     drawn as thumbnails. Touching a cell jumps straight to that
+ *     image; anything else that draws a picture leaves the gallery too.
  *
  * The board's own SW2 and SW3 step through the same list without
  * touching the screen: SW2 goes back one image, SW3 forward one. Clicks
@@ -169,6 +171,16 @@ static const uint16_t BUTTON_DEBOUNCE_MS = 25; // ms an edge must settle for
 // enough that a single click still feels immediate.
 static const uint16_t MULTI_CLICK_MS = 400;
 
+// A long press opens a 3x3 gallery of the first nine pictures; touching
+// a cell jumps straight to it. 320x240 divides into nine 106x80 cells
+// with 2px left over on the right, which stays background.
+static const int16_t GALLERY_COLS  = 3;
+static const int16_t GALLERY_ROWS  = 3;
+static const int16_t GALLERY_CELLS = GALLERY_COLS * GALLERY_ROWS;
+static const int16_t CELL_W = SCREEN_W / GALLERY_COLS;
+static const int16_t CELL_H = SCREEN_H / GALLERY_ROWS;
+static const int16_t GALLERY_GUTTER = 2; // px of background between thumbnails
+
 static const char LOG_FILE[]   = "/VIEWER.LOG";
 static const unsigned long IDLE_TIMEOUT_MS  = 60000UL; // untouched this long -> screen saver
 static const unsigned long SAVER_INTERVAL_MS = 5000UL; // screen saver advances this often
@@ -179,8 +191,11 @@ XPT2046 touch(D4, D3);
 #if USE_FRAME_BUFFER
 uint16_t frame[(uint32_t)SCREEN_W * SCREEN_H];      // the decoded picture
 uint16_t band[(uint32_t)BAND_PIXELS * SCREEN_H];    // one column band, row-major
-uint8_t  rowRgb[SCREEN_W * 3];                      // one raw BMP row
 #endif
+uint8_t  rowRgb[SCREEN_W * 3];                      // one raw BMP row; also the
+                                                    // gallery's source row on
+                                                    // both boards, so it is not
+                                                    // behind USE_FRAME_BUFFER
 
 char  bmpName[MAX_BMP_FILES][BMP_PATH_LEN];
 uint8_t bmpCount = 0;
@@ -214,6 +229,12 @@ bool reverseOrder = false;
 
 unsigned long idleTimeoutMs   = IDLE_TIMEOUT_MS;
 unsigned long saverIntervalMs = SAVER_INTERVAL_MS;
+
+// True while the 3x3 gallery is on screen, waiting for a cell to be
+// picked. Cleared by showCurrentBmp(), so anything that draws a picture
+// -- a chosen cell, a button, the screen saver -- leaves the gallery
+// without needing to say so.
+bool galleryActive = false;
 
 bool saverActive = false;
 uint8_t savedIndex = 0;             // where the normal list was, to come back to
@@ -602,10 +623,16 @@ static bool openBmpByIndex(uint8_t index, File &out)
 // so an SD read (its own SPI transaction on a different CS) never
 // gets interleaved with an open LCD one -- the two must not overlap
 // on a shared bus.
-static bool drawBmp(File &f, int16_t x0, int16_t y0)
+// Reads and validates the BMP header, leaving the file positioned just
+// past it, and hands back everything both drawing paths need. Out
+// parameters rather than a little struct: the IDE inserts its generated
+// prototypes above anything a .ino declares, so a user-defined type in
+// the signature would compile as an undeclared-int parameter.
+static bool readBmpHeader(File &f, int32_t &width, int32_t &absHeight,
+                          bool &flipY, uint32_t &dataOffset, uint32_t &rowBytes)
 {
 	uint16_t sig;
-	uint32_t fileSize, reserved, dataOffset, headerSize;
+	uint32_t fileSize, reserved, headerSize;
 	uint32_t widthU, heightU;
 	uint16_t planes, bpp;
 	uint32_t compression;
@@ -623,13 +650,26 @@ static bool drawBmp(File &f, int16_t x0, int16_t y0)
 
 	if (!ok || bpp != 24 || compression != 0) {
 		Serial.println(F("unsupported BMP (need signature BM, 24-bit, uncompressed)"));
-		f.close();
 		return false;
 	}
 
-	int32_t width = (int32_t)widthU;
-	bool flipY = (int32_t)heightU > 0; // positive height = bottom-up rows
-	int32_t absHeight = flipY ? (int32_t)heightU : -(int32_t)heightU;
+	width     = (int32_t)widthU;
+	flipY     = (int32_t)heightU > 0; // positive height = bottom-up rows
+	absHeight = flipY ? (int32_t)heightU : -(int32_t)heightU;
+	rowBytes  = ((uint32_t)width * 3 + 3) & ~3UL; // rows padded to 4 bytes
+	return true;
+}
+
+static bool drawBmp(File &f, int16_t x0, int16_t y0)
+{
+	int32_t  width, absHeight;
+	bool     flipY;
+	uint32_t dataOffset, rowBytes;
+
+	if (!readBmpHeader(f, width, absHeight, flipY, dataOffset, rowBytes)) {
+		f.close();
+		return false;
+	}
 
 	int16_t drawW = (int16_t)min((int32_t)tft.width() - x0, width);
 	int16_t drawH = (int16_t)min((int32_t)tft.height() - y0, absHeight);
@@ -637,8 +677,6 @@ static bool drawBmp(File &f, int16_t x0, int16_t y0)
 		f.close();
 		return false;
 	}
-
-	uint32_t rowBytes = ((uint32_t)width * 3 + 3) & ~3UL; // rows padded to 4 bytes
 
 #if USE_FRAME_BUFFER
 	// One sequential pass over the file, in the order the BMP stores it,
@@ -748,6 +786,90 @@ static bool drawBmp(File &f, int16_t x0, int16_t y0)
 	return true;
 }
 
+// Draws one BMP shrunk to fit a boxW x boxH cell at (x0,y0), nearest
+// neighbour, and centred in whatever of the cell it does not fill.
+//
+// Only the rows that land on a destination row are read; the rest are
+// seeked straight past and never fetched. At the 1/3 scale a 3x3 gallery
+// works out to, that makes a thumbnail cost about a third of a full
+// decode rather than all of it -- the whole nine-cell grid then reads
+// roughly three times one full-screen picture, not nine.
+//
+// Takes the same route as the no-frame-buffer path in drawBmp(): rows go
+// straight from the card to the panel. Staging in RAM would buy nothing
+// here, since each row is read once and used once either way.
+static bool drawThumb(File &f, int16_t x0, int16_t y0, int16_t boxW, int16_t boxH)
+{
+	int32_t  width, absHeight;
+	bool     flipY;
+	uint32_t dataOffset, rowBytes;
+
+	if (!readBmpHeader(f, width, absHeight, flipY, dataOffset, rowBytes)) {
+		f.close();
+		return false;
+	}
+
+	// Clipped the same way a full-screen draw is: rowRgb[] holds one
+	// screen-width row and nothing wider.
+	int16_t srcW = (int16_t)min((int32_t)SCREEN_W, width);
+	int16_t srcH = (int16_t)min((int32_t)SCREEN_H, absHeight);
+	if (srcW <= 0 || srcH <= 0) {
+		f.close();
+		return false;
+	}
+
+	// Fit without distorting: whichever axis runs out first sets the scale.
+	int16_t dstW = boxW;
+	int16_t dstH = (int16_t)((int32_t)srcH * boxW / srcW);
+	if (dstH > boxH) {
+		dstH = boxH;
+		dstW = (int16_t)((int32_t)srcW * boxH / srcH);
+	}
+	if (dstW <= 0 || dstH <= 0) {
+		f.close();
+		return false;
+	}
+
+	x0 += (boxW - dstW) / 2;
+	y0 += (boxH - dstH) / 2;
+
+	uint16_t px[CELL_W]; // one destination row; dstW never exceeds a cell
+
+	for (int16_t r = 0; r < dstH; r++) {
+		int16_t srcRow  = (int16_t)((int32_t)r * srcH / dstH);
+		int32_t fileRow = flipY ? (absHeight - 1 - srcRow) : srcRow;
+
+		f.seek(dataOffset + (uint32_t)fileRow * rowBytes);
+		if (f.read(rowRgb, (size_t)srcW * 3) != (int)srcW * 3) {
+			f.close();
+			return false;
+		}
+
+		for (int16_t c = 0; c < dstW; c++) {
+			int16_t s = (int16_t)((int32_t)c * srcW / dstW);
+			px[c] = rgb565(rowRgb[s * 3 + 2], rowRgb[s * 3 + 1], rowRgb[s * 3 + 0]);
+		}
+
+		tft.startWrite(x0, y0 + r, dstW, 1);
+		tft.writePixels(px, dstW);
+		tft.endWrite();
+	}
+
+	f.close();
+	return true;
+}
+
+// Opens the index'th picture of the current list, whichever way that
+// list was built.
+static bool openBmpAt(uint8_t index, File &out)
+{
+	if (usingPlaylist) {
+		out = SD.open(bmpName[index]);
+		return out;
+	}
+	return openBmpByIndex(index, out);
+}
+
 // Appends one timestamped line to LOG_FILE. Opened and closed per line
 // so an entry is safely on the card before the next image is drawn --
 // pulling the power mid-slideshow should not cost the log up to that
@@ -794,6 +916,8 @@ static void showCurrentBmp(void)
 		return;
 	}
 
+	galleryActive = false; // a picture is going up, so the grid is gone
+
 	if (pendingDir == PAINT_AUTO) {
 		paintDir = (DRAW_BOTTOM_UP ^ ((bmpIndex & 1) != 0)) ? PAINT_BOTTOM_UP : PAINT_TOP_DOWN;
 	} else {
@@ -810,13 +934,7 @@ static void showCurrentBmp(void)
 	Serial.println(bmpName[bmpIndex]);
 
 	File f;
-	bool opened;
-	if (usingPlaylist) {
-		f = SD.open(bmpName[bmpIndex]);
-		opened = f;
-	} else {
-		opened = openBmpByIndex(bmpIndex, f);
-	}
+	bool opened = openBmpAt(bmpIndex, f);
 
 	unsigned long drawT0 = millis();
 	bool drawn = opened && drawBmp(f, 0, 0);
@@ -877,6 +995,60 @@ static void exitSaver(void)
 	bmpIndex = (savedIndex < bmpCount) ? savedIndex : 0;
 	Serial.println(F("woken -> back to the normal list"));
 	showCurrentBmp();
+}
+
+// Draws the 3x3 grid of the first nine pictures and leaves it up until
+// something else paints over it. The screen is cleared first, unlike a
+// normal picture change: the cells do not cover it edge to edge, so
+// whatever was showing would otherwise stay visible around them.
+static void showGallery(void)
+{
+	unsigned long t0 = millis();
+
+	tft.fillScreen(ST7789_BLACK);
+
+	for (int16_t cell = 0; cell < GALLERY_CELLS; cell++) {
+		if (cell >= (int16_t)bmpCount) {
+			break; // fewer than nine pictures: the rest stay background
+		}
+
+		int16_t x0 = (int16_t)(cell % GALLERY_COLS) * CELL_W;
+		int16_t y0 = (int16_t)(cell / GALLERY_COLS) * CELL_H;
+		int16_t w  = CELL_W - GALLERY_GUTTER;
+		int16_t h  = CELL_H - GALLERY_GUTTER;
+
+		File f;
+		if (!openBmpAt((uint8_t)cell, f) || !drawThumb(f, x0, y0, w, h)) {
+			// Same red a failed full-screen draw uses, kept to the cell.
+			tft.fillRect(x0, y0, w, h, ST7789_RED);
+		}
+	}
+
+	galleryActive = true;
+
+	Serial.print(F("  gallery of "));
+	Serial.print((int)min((int16_t)bmpCount, GALLERY_CELLS));
+	Serial.print(F(" in "));
+	Serial.print(millis() - t0);
+	Serial.println(F(" ms"));
+}
+
+// Which cell a touch landed in, or -1 if that cell holds no picture.
+static int8_t galleryCellAt(uint16_t x, uint16_t y)
+{
+	int16_t col = (int16_t)x / CELL_W;
+	int16_t row = (int16_t)y / CELL_H;
+
+	// The last cell of each axis owns the few leftover pixels past it.
+	if (col >= GALLERY_COLS) {
+		col = GALLERY_COLS - 1;
+	}
+	if (row >= GALLERY_ROWS) {
+		row = GALLERY_ROWS - 1;
+	}
+
+	int16_t cell = row * GALLERY_COLS + col;
+	return (cell < (int16_t)bmpCount) ? (int8_t)cell : -1;
 }
 
 // True once per press, on the falling edge; the release only re-arms it.
@@ -1088,11 +1260,11 @@ void loop(void)
 		// finger lift that a genuine long press may not do for a while.
 		bool stationary = abs((int16_t)x - (int16_t)startX) < LONG_PRESS_TOLERANCE
 		                   && abs((int16_t)y - (int16_t)startY) < LONG_PRESS_TOLERANCE;
-		if (!wokeFromSaver && !longPressFired && stationary && millis() - pressStartMs >= LONG_PRESS_MS) {
+		if (!wokeFromSaver && !galleryActive && !longPressFired
+		     && stationary && millis() - pressStartMs >= LONG_PRESS_MS) {
 			longPressFired = true;
-			Serial.println(F("long press -> back to first image"));
-			bmpIndex = 0;
-			showCurrentBmp();
+			Serial.println(F("long press -> gallery"));
+			showGallery();
 		}
 		return;
 	}
@@ -1120,6 +1292,27 @@ void loop(void)
 
 	if (longPressFired) {
 		return; // already handled as a long press while it was held
+	}
+
+	// With the gallery up, a touch picks a cell instead of moving through
+	// the list -- so where it landed is all that matters, in either
+	// orientation. Reached only after the long press that opened the
+	// gallery has been released, since that release returns above.
+	if (galleryActive) {
+		int8_t cell = galleryCellAt(startX, startY);
+
+		if (cell < 0) {
+			Serial.println(F("gallery: empty cell"));
+			return;
+		}
+
+		Serial.print(F("gallery -> image "));
+		Serial.println((int)cell);
+		bmpIndex = (uint8_t)cell;
+		showCurrentBmp();
+
+		delay(300); // same release debounce the gesture paths end with
+		return;
 	}
 
 	int16_t dx = (int16_t)lastX - (int16_t)startX;
