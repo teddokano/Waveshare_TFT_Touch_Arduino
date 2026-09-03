@@ -123,6 +123,25 @@
 
 static const uint8_t SD_CS = D5;
 
+// Clocks tried in turn at startup, fastest first, until the card starts.
+//
+// SD.begin(csPin) would run it at SPI_HALF_SPEED, which the bundled SD
+// library fixes at 4MHz -- a sixth of what the LCD on the same bus is
+// clocked at, and most of why a full-screen draw costs about a second.
+// The two-argument overload sets the clock instead, applied once the
+// card is initialised (init() itself always runs slow, as entering SPI
+// mode requires).
+//
+// Not every card takes the top of this list -- the LCD managing 24MHz on
+// the same wires says nothing about whether the card will -- so it is
+// stepped down until one starts, and the one that did is printed. Each
+// attempt reads the partition table and FAT, so a clock that gets that
+// far is doing more than toggling pins, but a card that starts at a
+// clock it cannot really hold would show up as garbled pictures rather
+// than as a failure here.
+static const uint32_t SD_CLOCKS[] = { 24000000UL, 16000000UL, 12000000UL, 8000000UL };
+static const uint8_t  SD_CLOCK_COUNT = sizeof(SD_CLOCKS) / sizeof(SD_CLOCKS[0]);
+
 static const uint8_t MAX_BMP_FILES = 32;
 static const uint8_t BMP_PATH_LEN = 40;
 static const int16_t SCREEN_W = 320;
@@ -1199,9 +1218,27 @@ void setup(void)
 
 	tft.fillScreen(ST7789_BLACK);
 
-	if (!SD.begin(SD_CS)) {
+	uint32_t sdClock = 0;
+	for (uint8_t i = 0; i < SD_CLOCK_COUNT && sdClock == 0; i++) {
+		if (SD.begin(SD_CLOCKS[i], SD_CS)) {
+			sdClock = SD_CLOCKS[i];
+		}
+	}
+
+	// The library default last: slower than any of the above, but a card
+	// that only starts there still works perfectly well, and that beats
+	// an empty screen.
+	if (sdClock == 0 && !SD.begin(SD_CS)) {
 		Serial.println(F("SD.begin() failed -- check card is inserted and formatted FAT16/FAT32"));
 		return;
+	}
+
+	Serial.print(F("SD clock: "));
+	if (sdClock != 0) {
+		Serial.print(sdClock);
+		Serial.println(F(" Hz"));
+	} else {
+		Serial.println(F("library default (4 MHz)"));
 	}
 
 	logEvent(F("---- restart ----"), nullptr);

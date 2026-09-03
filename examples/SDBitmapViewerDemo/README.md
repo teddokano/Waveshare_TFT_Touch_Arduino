@@ -53,18 +53,30 @@ Building the grid reads only the rows that land on a destination row and seeks s
 
 ```
 long press -> gallery
-  gallery of 9 in 3848 ms
+  gallery of 9 in 2720 ms
 ```
 
-That measurement is from an FRDM-MCXA153, where a full-screen draw of a single picture took 993–1394ms — so nine thumbnails came to about 3.2 times one picture rather than nine times, which is what skipping rows buys.
+That is an FRDM-MCXA153, where a full-screen draw of a single picture took 753–1027ms — so nine thumbnails came to about three times one picture rather than nine times, which is what skipping rows buys.
 
-### Why it is not faster than that
+### Where the time actually goes
 
-Not the drawing. Two measurements pin it down: a row costs about the same 5ms whether it is fetched as one 960-byte read with one panel write or as five 192-byte reads with five, and replacing the per-row seeks with sequential reads that drop the unwanted rows made the grid *slower* (6946ms against 3797ms). Solving the two gives about 3.2ms to read 960 bytes and about 2.2ms for a seek — roughly 300KB/s.
+Not the drawing, and not the seeking. Two measurements pin it down: a row costs about the same whether it is fetched as one 960-byte read with one panel write or as five 192-byte reads with five, and replacing the per-row seeks with sequential reads that drop the unwanted rows made the grid *slower* (6946ms against 3797ms). Solving the two gave about 3.2ms per 960-byte read and 2.2ms per seek at the library's default clock — roughly 300KB/s.
 
-That is the bundled SD library, not the bus. It clocks the card at 4MHz: `SD.begin()` hardcodes `SPI_HALF_SPEED` and, in this version, so does the `begin(clock, csPin)` overload — the clock argument is ignored. It also transfers a byte per `SPI.transfer()` call. 960 bytes at 4MHz is 1.92ms of line time against the 3.2ms measured, which is about what a per-byte call costs on top. A sketch cannot raise it either: `SDClass` keeps its `Sd2Card` private, so the `setSpiClock()` that would do it is out of reach.
+`SD.begin(csPin)` runs the card at `SPI_HALF_SPEED`, which this library fixes at **4MHz**, a sixth of what the LCD on the same bus is clocked at. The sketch uses the two-argument overload instead, which sets the clock once the card is initialised, and steps down through `SD_CLOCKS[]` until the card starts. The one that took is printed at startup:
 
-So the LCD runs at 24MHz here and the card at 4MHz, and the gallery is at the ceiling this SD library allows.
+```
+SD clock: 8000000 Hz
+```
+
+On the shield this was written against, 24, 16 and 12MHz were all refused and 8MHz took — the LCD managing 24MHz on the same wires says nothing about what the card will do. That doubling bought 1.4x, not 2x:
+
+| | 4MHz | 8MHz |
+| --- | --- | --- |
+| Gallery of nine | 3797ms | 2720ms |
+| One picture, top-down | 1394ms | 1027ms |
+| One picture, bottom-up | 993ms | 753ms |
+
+The shortfall is the rest of the story: the library transfers a byte per `SPI.transfer()` call. A byte is 2.0µs of line time at 4MHz and 1.0µs at 8, against about 1.2µs of per-call overhead either way — which predicts 3.2/2.2 = 1.45x against the 1.40x measured. At 8MHz the overhead is already the larger half, so raising the clock further would have little left to give: even an infinitely fast bus would only reach about 1500ms for the grid. Getting past that means block transfers inside the SD library rather than anything a sketch can do.
 
 In portrait mode the grid is still drawn the way the panel is driven, so with the board turned it reads down the columns rather than across the rows. Cells are picked by where you touch either way.
 
@@ -212,6 +224,7 @@ Constants at the top of the sketch, beyond the two transition settings above:
 | `GALLERY_GUTTER` | 2 | Pixels of background left between thumbnails |
 | `MULTI_CLICK_MS` | 400 | How long after an SW2/SW3 click another one still joins the same count |
 | `BUTTON_DEBOUNCE_MS` | 25 | How long an SW2/SW3 edge must settle to be believed |
+| `SD_CLOCKS[]` | 24/16/12/8 MHz | Card clocks tried at startup, fastest first, until one starts |
 | `CHUNK_PIXELS` | 64 | Pixels per SD read / LCD burst when drawing straight from the card |
 | `BAND_PIXELS` | 64 | Width of a staged column band on the frame-buffer path |
 
