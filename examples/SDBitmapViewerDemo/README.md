@@ -48,12 +48,14 @@ The FRDM board's own **SW2** and **SW3** step through the same list without touc
 
 | Buttons | Result |
 | --- | --- |
-| SW3 once | Next image |
+| SW3 once | Next image, wiping downwards |
 | SW3 twice, quickly | Two images forward |
-| SW2 three times, quickly | Three images back |
+| SW2 three times, quickly | Three images back, wiping upwards |
 | Either, during the screen saver | Returns to the image you were on |
 
 Nothing in between is drawn: the sketch waits 400ms after the last click before moving, then makes the whole jump in one go. That is also what makes the counting work at all, since a single draw takes over 100ms and would otherwise still be running when the second click arrived.
+
+Unlike a tap, the wipe direction is fixed rather than alternating with the index: SW3 always wipes down and SW2 always up, so the transition shows which way through the list you just moved.
 
 The count is kept as a signed number of steps, so pressing both buttons within the same 400ms window subtracts one from the other; press each the same number of times and nothing moves. SW1 is the reset button and is left alone.
 
@@ -115,7 +117,7 @@ drawing /LOGO.BMP
 tap
 drawing /PICS/SUNSET.BMP
   bottom-up, 121 ms
-2 click(s) -> forward 2
+2 click(s) -> forward 2, wiping down
 drawing /PICS/HARBOUR.BMP
   top-down, 119 ms
 ```
@@ -147,6 +149,8 @@ The direction alternates with the image index, so consecutive pictures wipe oppo
 | --- | --- | --- |
 | `DRAW_BOTTOM_UP` | `false` | Which way even-numbered images go; odd ones take the other |
 | `SWIPE_WIPES_SIDEWAYS` | `false` | When true, a swipe wipes the way your finger went rather than taking the alternating default — sideways in landscape, up or down in portrait |
+
+SW2 and SW3 override both settings: they always wipe up and down respectively, whichever way the alternation happened to be going. A touch in portrait mode does the same.
 
 Sideways wiping costs very different amounts on the two boards, which is what the timing in the serial output is for:
 

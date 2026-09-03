@@ -31,7 +31,9 @@
  * touching the screen: SW2 goes back one image, SW3 forward one. Clicks
  * are counted rather than acted on one at a time -- a double click moves
  * two images, a triple three, and so on -- so nothing in between is ever
- * drawn. See pollButtons() for how the count is closed off.
+ * drawn. The wipe is fixed rather than alternating here: SW3 always
+ * wipes down, SW2 always up. See pollButtons() for how the count is
+ * closed off.
  *
  * Left untouched long enough the sketch drops into a screen saver,
  * advancing at a fixed interval and looping. The next touch
@@ -968,7 +970,13 @@ static void pollButtons(void)
 		return;
 	}
 	Serial.print(steps > 0 ? F("forward ") : F("back "));
-	Serial.println((int)(steps > 0 ? steps : -steps));
+	Serial.print((int)(steps > 0 ? steps : -steps));
+	Serial.println(steps > 0 ? F(", wiping down") : F(", wiping up"));
+
+	// Fixed, unlike a tap's: the direction says which way through the
+	// list the buttons just moved, so SW3 always wipes down and SW2
+	// always up rather than taking the index-alternating default.
+	pendingDir = (steps > 0) ? PAINT_TOP_DOWN : PAINT_BOTTOM_UP;
 
 	// Signed arithmetic in int16_t: bmpIndex is unsigned and steps may be
 	// negative, and C's % keeps the sign of the dividend, so the result is
