@@ -90,7 +90,7 @@ nxp:mcxボードで `SDBitmapViewer` を動かすには、mcx-arduino-core側の
 `TouchPaint`|赤/緑/青/灰のコーナーテストパターンを描画し(LCDの向きとRGB順序が一目で確認できる)、続いて画面座標をシリアルへ出力する簡単なタッチペイントを実行
 `SDBitmapViewer`|シールドのmicroSDスロットにある24ビット無圧縮BMPを一覧し、LCDに表示。画面のどこかをタッチすると次の画像へ。標準の `SD` ライブラリ(Arduino IDE同梱)が必要。macOS(Finderや `cp`)がカードへのコピー時に作る `._なんとか.bmp` というメタデータファイルは自動で除外します。カードのルートに `/PLAYLIST.JSN`(BMPパスのJSON配列、例: `["/PICS/SUNSET.BMP", "/LOGO.BMP"]`)があれば、そこに書かれたファイルを書かれた順に表示します(サブフォルダ可)。無ければルート直下の `.bmp` を全て、FATのディレクトリ順で表示します。拡張子が `.JSON` ではなく `.JSN` なのは、同梱のSDライブラリが8.3形式のファイル名しか扱えず、4文字の拡張子では開くことすらできないためです(中身は普通のJSONです)
 `GraphicsPrimitivesDemo`|すべての描画プリミティブ(fillRect/drawRect/線/円)を一通り実行し、数秒ごとに `setRotation()` の4方向を巡回。立ち上げ確認と目視でのリグレッション確認向け、LCDのみ使用
-`SDBitmapViewerDemo`|同じ発想をさらに進めたもので、**FRDM-MCXA153とFRDM-MCXN947専用**。タップ/スワイプ/長押しでの操作、スクリーンセーバー、画像切り替え時の方向付きワイプ、SDカードへのログを備え、これらすべてをカード上の1つのJSONファイルで設定します。[専用のREADME](examples/SDBitmapViewerDemo/README.ja.md)を参照してください。他のボードでは `#error` で停止するので、最初に触るサンプルとしては上記の `SDBitmapViewer` が適しています
+`SDBitmapViewerDemo`|同じ発想をさらに進めたもので、**FRDM-MCXA153とFRDM-MCXN947専用**。タップ/スワイプ/長押しでの操作、ボード上のSW2/SW3ボタン(押した回数だけ送る)、スクリーンセーバー、画像切り替え時の方向付きワイプ、SDカードへのログを備え、これらすべてをカード上の1つのJSONファイルで設定します。[専用のREADME](examples/SDBitmapViewerDemo/README.ja.md)を参照してください。他のボードでは `#error` で停止するので、最初に触るサンプルとしては上記の `SDBitmapViewer` が適しています
 `TouchCalibration`|画面に表示される4つの十字をタッチしていくと、そのまま貼り付けられる `setCalibration()` の呼び出しを出力するウィザード。TouchPaintのような決め打ちではなく、軸の入れ替えや反転を自動判定します
 
 ライブラリのインストール後: `ファイル` → `スケッチ例` → `Waveshare_TFT_Touch` からスケッチを選択

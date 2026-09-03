@@ -27,6 +27,12 @@
  *     started for LONG_PRESS_MS, without waiting for release, counts
  *     as a long press: jumps back to the first image.
  *
+ * The board's own SW2 and SW3 step through the same list without
+ * touching the screen: SW2 goes back one image, SW3 forward one. Clicks
+ * are counted rather than acted on one at a time -- a double click moves
+ * two images, a triple three, and so on -- so nothing in between is ever
+ * drawn. See pollButtons() for how the count is closed off.
+ *
  * Left untouched long enough the sketch drops into a screen saver,
  * advancing at a fixed interval and looping. The next touch
  * restores the normal list and the image that was on screen; that touch
@@ -148,6 +154,18 @@ static const bool DRAW_BOTTOM_UP = false;
 // since on FRDM-MCXA153 the sideways path has to read the file against
 // its grain and is markedly the slower one.
 #define SWIPE_WIPES_SIDEWAYS false
+
+// The two user buttons the FRDM boards carry, named by mcx-arduino-core
+// for both of them (SW2/SW3 sit on different physical pins per board, but
+// the core hides that). Both are momentary switches to ground, so they
+// read LOW while held; SW1 is the reset button and is not ours to use.
+static const uint8_t SW_PREV = SW2; // one image back
+static const uint8_t SW_NEXT = SW3; // one image forward
+static const uint16_t BUTTON_DEBOUNCE_MS = 25; // ms an edge must settle for
+// How long after a click the sketch keeps waiting for another one before
+// acting. Long enough not to split a deliberate double click, short
+// enough that a single click still feels immediate.
+static const uint16_t MULTI_CLICK_MS = 400;
 
 static const char LOG_FILE[]   = "/VIEWER.LOG";
 static const unsigned long IDLE_TIMEOUT_MS  = 60000UL; // untouched this long -> screen saver
@@ -855,7 +873,116 @@ static void exitSaver(void)
 	saverActive = false;
 	loadNormalList();
 	bmpIndex = (savedIndex < bmpCount) ? savedIndex : 0;
-	Serial.println(F("touched -> back to the normal list"));
+	Serial.println(F("woken -> back to the normal list"));
+	showCurrentBmp();
+}
+
+// True once per press, on the falling edge; the release only re-arms it.
+// A level that has not held for BUTTON_DEBOUNCE_MS is ignored outright
+// rather than delaying the edge, so a real press is still reported the
+// moment it is seen. Each button keeps its own pair of state variables,
+// so a bounce on one does not blank the other out -- passed in
+// individually rather than as a little struct, since the IDE inserts its
+// generated prototypes above anything a .ino declares.
+static bool buttonPressed(uint8_t pin, bool &down, unsigned long &lastChangeMs)
+{
+	bool now = (digitalRead(pin) == LOW); // switch to ground, so LOW = held
+
+	if (now == down || millis() - lastChangeMs < BUTTON_DEBOUNCE_MS) {
+		return false;
+	}
+
+	down         = now;
+	lastChangeMs = millis();
+	return now;
+}
+
+// SW2/SW3 navigation. Clicks are counted rather than acted on as they
+// arrive: each one adds a step and restarts a MULTI_CLICK_MS timer, and
+// only once that expires is the whole count applied in a single move. A
+// double click therefore lands two images away without drawing the one in
+// between -- which matters here, where a draw costs over 100ms and would
+// otherwise have to finish before the second click could even be seen.
+//
+// The count is kept as a signed number of steps, so SW2 and SW3 within
+// the same window subtract from each other and cancel out exactly if
+// pressed the same number of times. Nothing depends on that, but it beats
+// having to decide which of the two a mixed sequence "meant".
+static void pollButtons(void)
+{
+	static bool          prevDown = false, nextDown = false;
+	static unsigned long prevChangeMs = 0, nextChangeMs = 0;
+	static int8_t        pendingSteps = 0;
+	static uint8_t       clickCount   = 0;
+	static unsigned long lastClickMs  = 0;
+
+	int8_t delta   = 0;
+	bool   clicked = false;
+
+	if (buttonPressed(SW_PREV, prevDown, prevChangeMs)) {
+		delta--;
+		clicked = true;
+	}
+	if (buttonPressed(SW_NEXT, nextDown, nextChangeMs)) {
+		delta++;
+		clicked = true;
+	}
+
+	if (clicked) {
+		lastEventMs = millis();
+
+		if (saverActive) {
+			// Wakes only, like the first touch does: the click that woke
+			// the saver is spent doing so and does not also move.
+			exitSaver();
+			pendingSteps = 0;
+			clickCount   = 0;
+			return;
+		}
+
+		pendingSteps += delta;
+		if (clickCount < 255) {
+			clickCount++; // only ever compared against zero above 1, so
+			              // saturating beats wrapping back to "no clicks"
+		}
+		lastClickMs = millis();
+		return;
+	}
+
+	if (clickCount == 0 || millis() - lastClickMs < MULTI_CLICK_MS) {
+		return;
+	}
+
+	int8_t  steps = pendingSteps;
+	uint8_t count = clickCount;
+
+	pendingSteps = 0;
+	clickCount   = 0;
+
+	// Cast to int so these pick Print's integer overload rather than its
+	// character one: int8_t and uint8_t are (signed/unsigned) char.
+	Serial.print((int)count);
+	Serial.print(F(" click(s) -> "));
+	if (steps == 0) {
+		Serial.println(F("no move"));
+		return;
+	}
+	Serial.print(steps > 0 ? F("forward ") : F("back "));
+	Serial.println((int)(steps > 0 ? steps : -steps));
+
+	// Signed arithmetic in int16_t: bmpIndex is unsigned and steps may be
+	// negative, and C's % keeps the sign of the dividend, so the result is
+	// brought back into range explicitly rather than relying on the
+	// (bmpIndex + bmpCount - 1) trick used for single steps elsewhere.
+	int16_t idx = (int16_t)bmpIndex + steps;
+	int16_t n   = (int16_t)bmpCount;
+
+	idx %= n;
+	if (idx < 0) {
+		idx += n;
+	}
+	bmpIndex = (uint8_t)idx;
+
 	showCurrentBmp();
 }
 
@@ -865,6 +992,12 @@ void setup(void)
 	while (!Serial)
 		;
 	
+	// Internal pull-ups, on top of whatever the board already fits: both
+	// switches only ever pull their pin down, so an undriven input would
+	// otherwise float.
+	pinMode(SW_PREV, INPUT_PULLUP);
+	pinMode(SW_NEXT, INPUT_PULLUP);
+
 	tft.begin();
 	tft.setRotation(1); // landscape, 320x240
 	touch.begin();
@@ -895,6 +1028,7 @@ void setup(void)
 	Serial.println(F(" ms"));
 	Serial.println(reverseOrder ? F("list order: reversed")
 	                            : F("list order: as written"));
+	Serial.println(F("SW2 = previous, SW3 = next; click n times to move n images"));
 
 	lastEventMs = millis();
 	showCurrentBmp();
@@ -912,6 +1046,9 @@ void loop(void)
 	if (bmpCount == 0) {
 		return;
 	}
+
+	// Before the touch handling, which returns early down several paths.
+	pollButtons();
 
 	uint16_t x, y;
 	bool isTouched = touch.getPoint(x, y, tft.width(), tft.height());
