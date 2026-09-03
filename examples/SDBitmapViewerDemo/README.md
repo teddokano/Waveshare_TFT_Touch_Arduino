@@ -31,7 +31,8 @@ Without a `/PLAYLIST.JSN` the sketch simply shows every `.bmp` in the card's roo
 | Touch lower half | — | Previous image, wiping upwards |
 | Tap | Next image | (position decides, see above) |
 | Swipe | Left = next, right = previous | Not used |
-| Long press (hold still ~0.6s) | Back to the first image | Back to the first image |
+| Long press (hold still ~0.6s) | Opens the gallery (2x2 or 3x3) | Opens the gallery (2x2 or 3x3) |
+| Touch, with the gallery up | Jumps to that thumbnail | Jumps to that thumbnail |
 | Any touch during the screen saver | Returns to the image you were on | Returns to the image you were on |
 
 In landscape a swipe has to travel at least 20px and be more horizontal than vertical; anything shorter counts as a tap.
@@ -42,18 +43,59 @@ The long press fires while your finger is still down, without waiting for you to
 
 The touch that wakes the screen saver only wakes it — the tap or swipe it belongs to is discarded rather than also acted on, so you never overshoot by one image.
 
+### The gallery
+
+A long press replaces the picture with a grid of thumbnails: **2x2** for a list of four or fewer, **3x3** beyond that. A 2x2 grid is not a 3x3 with cells left empty — its cells are 160x120 rather than 106x80, half the screen across instead of a third, so a short list is not shown needlessly small. Touch one and it opens full screen; touch a cell with no picture behind it and nothing happens. Anything else that draws a picture — SW2/SW3, the screen saver starting — leaves the gallery as well.
+
+Both grids divide 320x240 exactly, with a 2px gutter between cells. A thumbnail is scaled to fit its cell without distorting and centred in whatever it does not fill. A cell whose file will not open or decode is filled red, the same as a failed full-screen draw.
+
+The 2x2 grid is also the quicker of the two to build, despite the bigger pictures: the cost is per source row read, and four 118-row thumbnails come to fewer rows than nine 78-row ones.
+
+Building the grid reads only the rows that land on a destination row and seeks straight past the rest, so at the 1/3 scale a 3x3 grid works out to, the whole thing costs about three full-screen draws rather than nine. The time it took is printed:
+
+```
+long press -> gallery
+  gallery 3x3 of 9 in 2720 ms
+```
+
+That is an FRDM-MCXA153, where a full-screen draw of a single picture took 753–1027ms — so nine thumbnails came to about three times one picture rather than nine times, which is what skipping rows buys.
+
+### Where the time actually goes
+
+Not the drawing, and not the seeking. Two measurements pin it down: a row costs about the same whether it is fetched as one 960-byte read with one panel write or as five 192-byte reads with five, and replacing the per-row seeks with sequential reads that drop the unwanted rows made the grid *slower* (6946ms against 3797ms). Solving the two gave about 3.2ms per 960-byte read and 2.2ms per seek at the library's default clock — roughly 300KB/s.
+
+`SD.begin(csPin)` runs the card at `SPI_HALF_SPEED`, which this library fixes at **4MHz**, a sixth of what the LCD on the same bus is clocked at. The sketch uses the two-argument overload instead, which sets the clock once the card is initialised, and steps down through `SD_CLOCKS[]` until the card starts. The one that took is printed at startup:
+
+```
+SD clock: 8000000 Hz
+```
+
+On the shield this was written against, 24, 16 and 12MHz were all refused and 8MHz took — the LCD managing 24MHz on the same wires says nothing about what the card will do. That doubling bought 1.4x, not 2x:
+
+| | 4MHz | 8MHz |
+| --- | --- | --- |
+| Gallery of nine | 3797ms | 2720ms |
+| One picture, top-down | 1394ms | 1027ms |
+| One picture, bottom-up | 993ms | 753ms |
+
+The shortfall is the rest of the story: the library transfers a byte per `SPI.transfer()` call. A byte is 2.0µs of line time at 4MHz and 1.0µs at 8, against about 1.2µs of per-call overhead either way — which predicts 3.2/2.2 = 1.45x against the 1.40x measured. At 8MHz the overhead is already the larger half, so raising the clock further would have little left to give: even an infinitely fast bus would only reach about 1500ms for the grid. Getting past that means block transfers inside the SD library rather than anything a sketch can do.
+
+In portrait mode the grid is still drawn the way the panel is driven, so with the board turned it reads down the columns rather than across the rows. Cells are picked by where you touch either way.
+
 ### The board's buttons
 
 The FRDM board's own **SW2** and **SW3** step through the same list without touching the screen, in either orientation. SW2 goes back one image, SW3 forward one — and clicks are counted, so a double click moves two images, a triple three, and so on:
 
 | Buttons | Result |
 | --- | --- |
-| SW3 once | Next image |
+| SW3 once | Next image, wiping downwards |
 | SW3 twice, quickly | Two images forward |
-| SW2 three times, quickly | Three images back |
+| SW2 three times, quickly | Three images back, wiping upwards |
 | Either, during the screen saver | Returns to the image you were on |
 
 Nothing in between is drawn: the sketch waits 400ms after the last click before moving, then makes the whole jump in one go. That is also what makes the counting work at all, since a single draw takes over 100ms and would otherwise still be running when the second click arrived.
+
+Unlike a tap, the wipe direction is fixed rather than alternating with the index: SW3 always wipes down and SW2 always up, so the transition shows which way through the list you just moved.
 
 The count is kept as a signed number of steps, so pressing both buttons within the same 400ms window subtracts one from the other; press each the same number of times and nothing moves. SW1 is the reset button and is left alone.
 
@@ -115,7 +157,7 @@ drawing /LOGO.BMP
 tap
 drawing /PICS/SUNSET.BMP
   bottom-up, 121 ms
-2 click(s) -> forward 2
+2 click(s) -> forward 2, wiping down
 drawing /PICS/HARBOUR.BMP
   top-down, 119 ms
 ```
@@ -148,6 +190,8 @@ The direction alternates with the image index, so consecutive pictures wipe oppo
 | `DRAW_BOTTOM_UP` | `false` | Which way even-numbered images go; odd ones take the other |
 | `SWIPE_WIPES_SIDEWAYS` | `false` | When true, a swipe wipes the way your finger went rather than taking the alternating default — sideways in landscape, up or down in portrait |
 
+SW2 and SW3 override both settings: they always wipe up and down respectively, whichever way the alternation happened to be going. A touch in portrait mode does the same.
+
 Sideways wiping costs very different amounts on the two boards, which is what the timing in the serial output is for:
 
 - **FRDM-MCXN947** decodes the whole picture into RAM first (150KB), so it reads the file in one sequential pass and every direction costs the same afterwards.
@@ -178,8 +222,11 @@ Constants at the top of the sketch, beyond the two transition settings above:
 | `SWIPE_THRESHOLD` | 20 | Pixels of travel along the swipe axis before a drag counts as a swipe |
 | `LONG_PRESS_MS` | 600 | How long a still touch becomes a long press |
 | `LONG_PRESS_TOLERANCE` | 10 | Pixels a long press may drift and still count |
+| `GALLERY_2X2_MAX` | 4 | Lists this long or shorter get a 2x2 grid; longer ones get 3x3 |
+| `GALLERY_GUTTER` | 2 | Pixels of background left between thumbnails |
 | `MULTI_CLICK_MS` | 400 | How long after an SW2/SW3 click another one still joins the same count |
 | `BUTTON_DEBOUNCE_MS` | 25 | How long an SW2/SW3 edge must settle to be believed |
+| `SD_CLOCKS[]` | 24/16/12/8 MHz | Card clocks tried at startup, fastest first, until one starts |
 | `CHUNK_PIXELS` | 64 | Pixels per SD read / LCD burst when drawing straight from the card |
 | `BAND_PIXELS` | 64 | Width of a staged column band on the frame-buffer path |
 
