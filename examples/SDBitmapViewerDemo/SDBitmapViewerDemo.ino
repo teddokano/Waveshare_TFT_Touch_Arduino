@@ -835,7 +835,17 @@ static bool drawThumb(File &f, int16_t x0, int16_t y0, int16_t boxW, int16_t box
 
 	uint16_t px[CELL_W]; // one destination row; dstW never exceeds a cell
 
-	for (int16_t r = 0; r < dstH; r++) {
+	for (int16_t i = 0; i < dstH; i++) {
+		// Walked in whichever order makes the source reads run forwards
+		// through the file. Each destination row goes out in its own
+		// address window, so the order they are drawn in is not visible
+		// -- unlike a full-screen draw, where the row order is the wipe
+		// direction and cannot be chosen freely. A BMP is normally
+		// stored bottom-up, which would otherwise have the thumbnail
+		// read back to front: measured on FRDM-MCXA153, one full-screen
+		// draw costs 1394ms against the grain and 993ms with it.
+		int16_t r = flipY ? (int16_t)(dstH - 1 - i) : i;
+
 		int16_t srcRow  = (int16_t)((int32_t)r * srcH / dstH);
 		int32_t fileRow = flipY ? (absHeight - 1 - srcRow) : srcRow;
 

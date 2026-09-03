@@ -53,8 +53,12 @@ Building the grid reads only the rows that land on a destination row and seeks s
 
 ```
 long press -> gallery
-  gallery of 9 in 412 ms
+  gallery of 9 in 3848 ms
 ```
+
+That measurement is from an FRDM-MCXA153, on which one full-screen draw of the same pictures took 993–1394ms — so nine thumbnails came to 3.2 times one picture, not nine times.
+
+The thumbnail rows are read in file order rather than display order, which a full-screen draw cannot do: there the row order *is* the wipe direction. A BMP is normally stored bottom-up, so reading a thumbnail in display order would walk the file backwards, and backward seeking is what the 1394ms-versus-993ms gap between the two full-screen directions above is measuring.
 
 In portrait mode the grid is still drawn the way the panel is driven, so with the board turned it reads down the columns rather than across the rows. Cells are picked by where you touch either way.
 
