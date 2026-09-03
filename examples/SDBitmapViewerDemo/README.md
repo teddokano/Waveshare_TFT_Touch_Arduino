@@ -56,9 +56,15 @@ long press -> gallery
   gallery of 9 in 3848 ms
 ```
 
-That measurement is from an FRDM-MCXA153, on which one full-screen draw of the same pictures took 993–1394ms — so nine thumbnails came to 3.2 times one picture, not nine times.
+That measurement is from an FRDM-MCXA153, where a full-screen draw of a single picture took 993–1394ms — so nine thumbnails came to about 3.2 times one picture rather than nine times, which is what skipping rows buys.
 
-The thumbnail rows are read in file order rather than display order, which a full-screen draw cannot do: there the row order *is* the wipe direction. A BMP is normally stored bottom-up, so reading a thumbnail in display order would walk the file backwards, and backward seeking is what the 1394ms-versus-993ms gap between the two full-screen directions above is measuring.
+### Why it is not faster than that
+
+Not the drawing. Two measurements pin it down: a row costs about the same 5ms whether it is fetched as one 960-byte read with one panel write or as five 192-byte reads with five, and replacing the per-row seeks with sequential reads that drop the unwanted rows made the grid *slower* (6946ms against 3797ms). Solving the two gives about 3.2ms to read 960 bytes and about 2.2ms for a seek — roughly 300KB/s.
+
+That is the bundled SD library, not the bus. It clocks the card at 4MHz: `SD.begin()` hardcodes `SPI_HALF_SPEED` and, in this version, so does the `begin(clock, csPin)` overload — the clock argument is ignored. It also transfers a byte per `SPI.transfer()` call. 960 bytes at 4MHz is 1.92ms of line time against the 3.2ms measured, which is about what a per-byte call costs on top. A sketch cannot raise it either: `SDClass` keeps its `Sd2Card` private, so the `setSpiClock()` that would do it is out of reach.
+
+So the LCD runs at 24MHz here and the card at 4MHz, and the gallery is at the ceiling this SD library allows.
 
 In portrait mode the grid is still drawn the way the panel is driven, so with the board turned it reads down the columns rather than across the rows. Cells are picked by where you touch either way.
 
