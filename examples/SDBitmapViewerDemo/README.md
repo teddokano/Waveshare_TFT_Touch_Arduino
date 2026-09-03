@@ -2,7 +2,7 @@
 
 English | [日本語](README.ja.md)
 
-A touch-driven photo viewer for the [Waveshare 2.8inch TFT Touch Shield](https://www.waveshare.com/2.8inch-tft-touch-shield.htm) (SKU: 10684). It shows 24-bit BMP files from the shield's microSD slot, driven by tap, swipe and long press, and falls back to a screen saver when left alone.
+A touch-driven photo viewer for the [Waveshare 2.8inch TFT Touch Shield](https://www.waveshare.com/2.8inch-tft-touch-shield.htm) (SKU: 10684). It shows 24-bit BMP files from the shield's microSD slot, driven by tap, swipe and long press or by the board's own SW2/SW3 buttons, and falls back to a screen saver when left alone.
 
 This is the elaborate sibling of [`SDBitmapViewer`](../SDBitmapViewer). That one is the portable example and runs on every board this library supports; this one targets **FRDM-MCXA153 and FRDM-MCXN947 only** and spends RAM freely to keep transitions quick. Building it for anything else stops with a clear `#error`.
 
@@ -41,6 +41,23 @@ The long press fires while your finger is still down, without waiting for you to
 **Portrait mode** is for holding the board on its side. Only the touch handling changes: a touch is read by *where* it landed rather than which way it moved, since flicking along the panel's long axis is awkward with the board turned. Touch the top half and the next picture wipes in downwards; touch the bottom half and the previous one wipes in upwards. Swipes are not read at all in this mode, and the wipe direction comes from the gesture rather than the alternating default. The panel itself is still driven in landscape, since the sketch has no way of knowing which way round you are holding the board, so the pictures are not rotated for you.
 
 The touch that wakes the screen saver only wakes it — the tap or swipe it belongs to is discarded rather than also acted on, so you never overshoot by one image.
+
+### The board's buttons
+
+The FRDM board's own **SW2** and **SW3** step through the same list without touching the screen, in either orientation. SW2 goes back one image, SW3 forward one — and clicks are counted, so a double click moves two images, a triple three, and so on:
+
+| Buttons | Result |
+| --- | --- |
+| SW3 once | Next image |
+| SW3 twice, quickly | Two images forward |
+| SW2 three times, quickly | Three images back |
+| Either, during the screen saver | Returns to the image you were on |
+
+Nothing in between is drawn: the sketch waits 400ms after the last click before moving, then makes the whole jump in one go. That is also what makes the counting work at all, since a single draw takes over 100ms and would otherwise still be running when the second click arrived.
+
+The count is kept as a signed number of steps, so pressing both buttons within the same 400ms window subtracts one from the other; press each the same number of times and nothing moves. SW1 is the reset button and is left alone.
+
+The buttons are read with `pinMode(SW2, INPUT_PULLUP)` and `digitalRead()`, using the `SW2` / `SW3` pin names mcx-arduino-core defines for both boards. Note that the pin one of them sits on doubles as the chip's ISP-mode input (SW2 on FRDM-MCXA153, SW3 on FRDM-MCXN947), so holding that button down while resetting the board can put it into the bootloader rather than running the sketch. Press them after the board is up.
 
 ## `/PLAYLIST.JSN`
 
@@ -92,11 +109,15 @@ At 115200 baud you get the list that was loaded, the settings in force, and a li
 landscape mode: swipe left / right
 screen saver after 60000 ms, advancing every 5000 ms
 list order: as written
+SW2 = previous, SW3 = next; click n times to move n images
 drawing /LOGO.BMP
   top-down, 118 ms
 tap
 drawing /PICS/SUNSET.BMP
   bottom-up, 121 ms
+2 click(s) -> forward 2
+drawing /PICS/HARBOUR.BMP
+  top-down, 119 ms
 ```
 
 The direction shown is how that picture was painted on (see below), and the milliseconds are what the draw itself cost — handy when comparing wipe directions or boards.
@@ -140,6 +161,8 @@ Sideways wiping costs very different amounts on the two boards, which is what th
 
 **The picture comes out white, drawing crawls, and the card then stops responding until you power-cycle.** Seen with cheap low-capacity cards — three of the same type behaved identically while better cards were fine on the same board and shield. Reading the whole file with no drawing in between succeeds every time; it only breaks once panel writes are interleaved with card reads. Nothing in this sketch compensates for it. Try a different card.
 
+**SW2 and SW3 do nothing, or the board comes up unresponsive after a reset with one held down.** The pin one of the two sits on is also the chip's ISP-mode input — SW2 on FRDM-MCXA153, SW3 on FRDM-MCXN947 — so holding it while the board resets enters the bootloader instead of running the sketch. Release it and reset again. If they do nothing at any other time, check the serial output for the `SW2 = previous, SW3 = next` line: without it the sketch never got past `SD.begin()`.
+
 **The screen saver never starts.** It needs a `saver` member with at least one readable path. Check the serial output at startup: the settings line tells you the timeout actually in force.
 
 **Everything is slow, on both boards.** Check the core version — mcx-arduino-core before 0.4.1 dropped the requested SPI clock silently and left the bus at whatever initialisation had set.
@@ -155,6 +178,8 @@ Constants at the top of the sketch, beyond the two transition settings above:
 | `SWIPE_THRESHOLD` | 20 | Pixels of travel along the swipe axis before a drag counts as a swipe |
 | `LONG_PRESS_MS` | 600 | How long a still touch becomes a long press |
 | `LONG_PRESS_TOLERANCE` | 10 | Pixels a long press may drift and still count |
+| `MULTI_CLICK_MS` | 400 | How long after an SW2/SW3 click another one still joins the same count |
+| `BUTTON_DEBOUNCE_MS` | 25 | How long an SW2/SW3 edge must settle to be believed |
 | `CHUNK_PIXELS` | 64 | Pixels per SD read / LCD burst when drawing straight from the card |
 | `BAND_PIXELS` | 64 | Width of a staged column band on the frame-buffer path |
 
