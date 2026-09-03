@@ -31,7 +31,7 @@ Without a `/PLAYLIST.JSN` the sketch simply shows every `.bmp` in the card's roo
 | Touch lower half | — | Previous image, wiping upwards |
 | Tap | Next image | (position decides, see above) |
 | Swipe | Left = next, right = previous | Not used |
-| Long press (hold still ~0.6s) | Opens the gallery | Opens the gallery |
+| Long press (hold still ~0.6s) | Opens the gallery (2x2 or 3x3) | Opens the gallery (2x2 or 3x3) |
 | Touch, with the gallery up | Jumps to that thumbnail | Jumps to that thumbnail |
 | Any touch during the screen saver | Returns to the image you were on | Returns to the image you were on |
 
@@ -45,15 +45,17 @@ The touch that wakes the screen saver only wakes it — the tap or swipe it belo
 
 ### The gallery
 
-A long press replaces the picture with a 3x3 grid of the first nine images in the list, drawn as thumbnails. Touch one and it opens full screen; touch a cell with no picture behind it and nothing happens. Anything else that draws a picture — SW2/SW3, the screen saver starting — leaves the gallery as well.
+A long press replaces the picture with a grid of thumbnails: **2x2** for a list of four or fewer, **3x3** beyond that. A 2x2 grid is not a 3x3 with cells left empty — its cells are 160x120 rather than 106x80, half the screen across instead of a third, so a short list is not shown needlessly small. Touch one and it opens full screen; touch a cell with no picture behind it and nothing happens. Anything else that draws a picture — SW2/SW3, the screen saver starting — leaves the gallery as well.
 
-Each cell is 106x80 with a 2px gutter, and a thumbnail is scaled to fit inside it without distorting, centred in whatever it does not fill. A cell whose file will not open or decode is filled red, the same as a failed full-screen draw.
+Both grids divide 320x240 exactly, with a 2px gutter between cells. A thumbnail is scaled to fit its cell without distorting and centred in whatever it does not fill. A cell whose file will not open or decode is filled red, the same as a failed full-screen draw.
+
+The 2x2 grid is also the quicker of the two to build, despite the bigger pictures: the cost is per source row read, and four 118-row thumbnails come to fewer rows than nine 78-row ones.
 
 Building the grid reads only the rows that land on a destination row and seeks straight past the rest, so at the 1/3 scale a 3x3 grid works out to, the whole thing costs about three full-screen draws rather than nine. The time it took is printed:
 
 ```
 long press -> gallery
-  gallery of 9 in 2720 ms
+  gallery 3x3 of 9 in 2720 ms
 ```
 
 That is an FRDM-MCXA153, where a full-screen draw of a single picture took 753–1027ms — so nine thumbnails came to about three times one picture rather than nine times, which is what skipping rows buys.
@@ -220,7 +222,7 @@ Constants at the top of the sketch, beyond the two transition settings above:
 | `SWIPE_THRESHOLD` | 20 | Pixels of travel along the swipe axis before a drag counts as a swipe |
 | `LONG_PRESS_MS` | 600 | How long a still touch becomes a long press |
 | `LONG_PRESS_TOLERANCE` | 10 | Pixels a long press may drift and still count |
-| `GALLERY_COLS` / `GALLERY_ROWS` | 3 / 3 | Grid the long press opens; the cell size follows from these |
+| `GALLERY_2X2_MAX` | 4 | Lists this long or shorter get a 2x2 grid; longer ones get 3x3 |
 | `GALLERY_GUTTER` | 2 | Pixels of background left between thumbnails |
 | `MULTI_CLICK_MS` | 400 | How long after an SW2/SW3 click another one still joins the same count |
 | `BUTTON_DEBOUNCE_MS` | 25 | How long an SW2/SW3 edge must settle to be believed |

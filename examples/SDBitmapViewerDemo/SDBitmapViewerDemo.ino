@@ -25,9 +25,10 @@
  *     printed either way, which makes them comparable.
  *   - A touch that stays within LONG_PRESS_TOLERANCE of where it
  *     started for LONG_PRESS_MS, without waiting for release, counts
- *     as a long press: opens a 3x3 gallery of the first nine pictures,
- *     drawn as thumbnails. Touching a cell jumps straight to that
- *     image; anything else that draws a picture leaves the gallery too.
+ *     as a long press: opens a gallery of thumbnails, 2x2 for a list of
+ *     four or fewer and 3x3 beyond that. Touching a cell jumps straight
+ *     to that image; anything else that draws a picture leaves the
+ *     gallery too.
  *
  * The board's own SW2 and SW3 step through the same list without
  * touching the screen: SW2 goes back one image, SW3 forward one. Clicks
@@ -193,11 +194,12 @@ static const uint16_t MULTI_CLICK_MS = 400;
 // A long press opens a 3x3 gallery of the first nine pictures; touching
 // a cell jumps straight to it. 320x240 divides into nine 106x80 cells
 // with 2px left over on the right, which stays background.
-static const int16_t GALLERY_COLS  = 3;
-static const int16_t GALLERY_ROWS  = 3;
-static const int16_t GALLERY_CELLS = GALLERY_COLS * GALLERY_ROWS;
-static const int16_t CELL_W = SCREEN_W / GALLERY_COLS;
-static const int16_t CELL_H = SCREEN_H / GALLERY_ROWS;
+// The grid is sized to the list rather than fixed: a list of four or
+// fewer gets 2x2, so four pictures are shown at 160x120 apiece instead
+// of squeezed into a ninth of the screen with five cells left empty.
+// Anything longer gets 3x3. Both divide 320x240 exactly.
+static const uint8_t GALLERY_2X2_MAX = 4;
+static const int16_t MAX_CELL_W = SCREEN_W / 2; // widest a cell can be
 static const int16_t GALLERY_GUTTER = 2; // px of background between thumbnails
 
 static const char LOG_FILE[]   = "/VIEWER.LOG";
@@ -254,6 +256,10 @@ unsigned long saverIntervalMs = SAVER_INTERVAL_MS;
 // -- a chosen cell, a button, the screen saver -- leaves the gallery
 // without needing to say so.
 bool galleryActive = false;
+
+// The grid showGallery() last drew, so galleryCellAt() maps a touch with
+// the same one. Square, so a single side is enough.
+uint8_t gallerySide = 3;
 
 bool saverActive = false;
 uint8_t savedIndex = 0;             // where the normal list was, to come back to
@@ -852,7 +858,7 @@ static bool drawThumb(File &f, int16_t x0, int16_t y0, int16_t boxW, int16_t box
 	x0 += (boxW - dstW) / 2;
 	y0 += (boxH - dstH) / 2;
 
-	uint16_t px[CELL_W]; // one destination row; dstW never exceeds a cell
+	uint16_t px[MAX_CELL_W]; // one destination row; dstW never exceeds a cell
 
 	for (int16_t i = 0; i < dstH; i++) {
 		// Walked in whichever order makes the source reads run forwards
@@ -1028,28 +1034,37 @@ static void exitSaver(void)
 	showCurrentBmp();
 }
 
-// Draws the 3x3 grid of the first nine pictures and leaves it up until
-// something else paints over it. The screen is cleared first, unlike a
-// normal picture change: the cells do not cover it edge to edge, so
-// whatever was showing would otherwise stay visible around them.
+// Draws the grid and leaves it up until something else paints over it.
+// The screen is cleared first, unlike a normal picture change: the cells
+// do not cover it edge to edge, so whatever was showing would otherwise
+// stay visible around them.
+//
+// A 2x2 grid is not just a 3x3 with cells removed -- its thumbnails are
+// half the screen across rather than a third, so they read far better
+// for a short list. It is also quicker to build despite being bigger,
+// since the cost is per source row read and four 118-row thumbnails come
+// to fewer rows than nine 78-row ones.
 static void showGallery(void)
 {
 	unsigned long t0 = millis();
 
+	gallerySide = (bmpCount <= GALLERY_2X2_MAX) ? 2 : 3;
+
+	int16_t cellW = SCREEN_W / gallerySide;
+	int16_t cellH = SCREEN_H / gallerySide;
+	uint8_t cells = (uint8_t)(gallerySide * gallerySide);
+	uint8_t shown = (bmpCount < cells) ? bmpCount : cells;
+
 	tft.fillScreen(ST7789_BLACK);
 
-	for (int16_t cell = 0; cell < GALLERY_CELLS; cell++) {
-		if (cell >= (int16_t)bmpCount) {
-			break; // fewer than nine pictures: the rest stay background
-		}
-
-		int16_t x0 = (int16_t)(cell % GALLERY_COLS) * CELL_W;
-		int16_t y0 = (int16_t)(cell / GALLERY_COLS) * CELL_H;
-		int16_t w  = CELL_W - GALLERY_GUTTER;
-		int16_t h  = CELL_H - GALLERY_GUTTER;
+	for (uint8_t cell = 0; cell < shown; cell++) {
+		int16_t x0 = (int16_t)(cell % gallerySide) * cellW;
+		int16_t y0 = (int16_t)(cell / gallerySide) * cellH;
+		int16_t w  = cellW - GALLERY_GUTTER;
+		int16_t h  = cellH - GALLERY_GUTTER;
 
 		File f;
-		if (!openBmpAt((uint8_t)cell, f) || !drawThumb(f, x0, y0, w, h)) {
+		if (!openBmpAt(cell, f) || !drawThumb(f, x0, y0, w, h)) {
 			// Same red a failed full-screen draw uses, kept to the cell.
 			tft.fillRect(x0, y0, w, h, ST7789_RED);
 		}
@@ -1057,28 +1072,35 @@ static void showGallery(void)
 
 	galleryActive = true;
 
-	Serial.print(F("  gallery of "));
-	Serial.print((int)min((int16_t)bmpCount, GALLERY_CELLS));
+	Serial.print(F("  gallery "));
+	Serial.print((int)gallerySide);
+	Serial.print('x');
+	Serial.print((int)gallerySide);
+	Serial.print(F(" of "));
+	Serial.print((int)shown);
 	Serial.print(F(" in "));
 	Serial.print(millis() - t0);
 	Serial.println(F(" ms"));
 }
 
 // Which cell a touch landed in, or -1 if that cell holds no picture.
+// Uses the grid showGallery() last drew, not the one the current list
+// would get: the two only differ if the list changed underneath, and
+// what is on screen is what the touch was aimed at.
 static int8_t galleryCellAt(uint16_t x, uint16_t y)
 {
-	int16_t col = (int16_t)x / CELL_W;
-	int16_t row = (int16_t)y / CELL_H;
+	int16_t col = (int16_t)x / (SCREEN_W / gallerySide);
+	int16_t row = (int16_t)y / (SCREEN_H / gallerySide);
 
-	// The last cell of each axis owns the few leftover pixels past it.
-	if (col >= GALLERY_COLS) {
-		col = GALLERY_COLS - 1;
+	// The last cell of each axis owns any leftover pixels past it.
+	if (col >= gallerySide) {
+		col = gallerySide - 1;
 	}
-	if (row >= GALLERY_ROWS) {
-		row = GALLERY_ROWS - 1;
+	if (row >= gallerySide) {
+		row = gallerySide - 1;
 	}
 
-	int16_t cell = row * GALLERY_COLS + col;
+	int16_t cell = row * gallerySide + col;
 	return (cell < (int16_t)bmpCount) ? (int8_t)cell : -1;
 }
 
