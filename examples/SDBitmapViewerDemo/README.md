@@ -131,6 +131,8 @@ The extension is `.JSN`, not `.JSON`, because the bundled SD library only handle
 
 A file containing nothing but a bare array is still accepted and read as the playlist, so cards written for the earlier one-list-per-file layout keep working untouched.
 
+The reverse also holds: [`SDBitmapViewer`](../SDBitmapViewer) reads the `playlist` member out of this file and ignores the rest, so one card works with either sketch. It needs 1.3.1 or newer for that — before then it collected every quoted string in the file, member names included, and quietly produced a list of paths that do not exist.
+
 ### Editing tips
 
 - A member that is missing, or whose value is malformed, simply leaves that setting at its default, so a card written without the newer members keeps behaving exactly as it did. The startup serial output tells you what is actually in force.

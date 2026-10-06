@@ -12,6 +12,11 @@
  *     a JSON array of BMP file paths, e.g.
  *       ["/PICS/SUNSET.BMP", "/LOGO.BMP", "/PICS/MOUNTAIN.BMP"]
  *     shown in exactly that order. Paths can point into subfolders.
+ *     A JSON object with a "playlist" member works too, so a card set
+ *     up for SDBitmapViewerDemo -- which keeps its own settings in the
+ *     same file -- plays here without being edited; everything beside
+ *     "playlist" is ignored. See parsePlaylist() for what is and is not
+ *     understood.
  *     (Extension is .JSN, not .JSON -- this sketch's SD library only
  *     supports 8.3 filenames, so a 4-character extension can't be
  *     opened at all; the file's content is still plain JSON.) See
@@ -53,6 +58,12 @@ static const uint8_t BMP_PATH_LEN = 28; // "/SUBFOLDER1/FILE.BMP"-sized -- kept
 static const uint8_t CHUNK_PIXELS = 32; // small on purpose: keeps RAM
                                          // usage safe on 2KB AVR boards
 static const char PLAYLIST_FILE[] = "/PLAYLIST.JSN";
+
+// The member this sketch reads when PLAYLIST_FILE holds a JSON object
+// rather than a bare array -- which is what SDBitmapViewerDemo writes,
+// since it keeps its own settings in the same file. Matching the name
+// means one card works with either sketch.
+static const char PLAYLIST_KEY[] = "playlist";
 
 ST7789  tft(D10, D7, D9);
 XPT2046 touch(D4, D3);
@@ -115,13 +126,51 @@ static void scanBmpFiles(void)
 	}
 }
 
-// Minimal, hand-rolled parser for PLAYLIST_FILE: reads a top-level
-// JSON array of quoted path strings straight off the SD card one
-// character at a time (no whole-file buffer, no library dependency --
-// keeps this safe on 2KB-RAM AVR boards). Only "\\" and "\"" escapes
-// are recognized; anything else after a backslash is taken literally.
-// Not a general JSON parser -- deliberately just enough for this
-// sketch's own array-of-strings format.
+// Steps past whitespace and returns the next meaningful character
+// without consuming it, or -1 at end of file. Used to tell a JSON member
+// name from a value: only a name is followed by a colon.
+static int peekNonSpace(File &f)
+{
+	while (f.available()) {
+		int c = f.peek();
+		if (c != ' ' && c != '\t' && c != '\r' && c != '\n') {
+			return c;
+		}
+		f.read();
+	}
+	return -1;
+}
+
+// Minimal, hand-rolled parser for PLAYLIST_FILE: walks the file one
+// character at a time, picking out quoted strings (no whole-file buffer,
+// no library dependency -- keeps this safe on 2KB-RAM AVR boards). Only
+// "\\" and "\"" escapes are recognized; anything else after a backslash
+// is taken literally.
+//
+// Not a general JSON parser. It handles the two shapes this library's
+// own examples write, in one pass over one open -- the bundled SD
+// library is not reliable about handing back the same path twice, so
+// looking for a member and then rewinding to read it is not an option:
+//
+//   ["/A.BMP", "/B.BMP"]                 a bare array: every string is
+//                                        a path, which is what this
+//                                        sketch has always written
+//
+//   { "playlist": ["/A.BMP"], ... }      an object, as written by
+//                                        SDBitmapViewerDemo, which
+//                                        keeps its own settings beside
+//                                        the list: only the "playlist"
+//                                        member is a path list here
+//
+// A string followed by a colon is a member name, so it is never stored,
+// and it decides whether the strings after it are ours. Until the first
+// such name is seen every string is taken, which is what makes a bare
+// array work without a special case. Order does not matter: whichever
+// member comes first, "playlist" claims the list when it arrives.
+//
+// An object with no "playlist" member leaves nothing collected, and the
+// caller falls back to scanning the directory -- the same as for a file
+// that will not parse at all.
 static bool parsePlaylist(void)
 {
 	File f = SD.open(PLAYLIST_FILE);
@@ -130,11 +179,13 @@ static bool parsePlaylist(void)
 	}
 
 	bmpCount = 0;
-	bool inString = false;
+	bool inString   = false;
+	bool sawName    = false; // any member name seen yet?
+	bool inPlaylist = false; // inside the "playlist" member?
 	char buf[BMP_PATH_LEN];
 	uint8_t len = 0;
 
-	while (f.available() && bmpCount < MAX_BMP_FILES) {
+	while (f.available()) {
 		char c = f.read();
 
 		if (!inString) {
@@ -150,7 +201,16 @@ static bool parsePlaylist(void)
 		} else if (c == '"') {
 			inString = false;
 			buf[len] = '\0';
-			if (len > 0) {
+
+			if (peekNonSpace(f) == ':') {
+				// A member name. Discard it, and let it say whether what
+				// follows belongs to us.
+				sawName    = true;
+				inPlaylist = (strcmp(buf, PLAYLIST_KEY) == 0);
+				if (inPlaylist) {
+					bmpCount = 0; // this member is the list, not anything before it
+				}
+			} else if (len > 0 && (!sawName || inPlaylist) && bmpCount < MAX_BMP_FILES) {
 				strncpy(bmpName[bmpCount], buf, BMP_PATH_LEN - 1);
 				bmpName[bmpCount][BMP_PATH_LEN - 1] = '\0';
 				bmpCount++;
