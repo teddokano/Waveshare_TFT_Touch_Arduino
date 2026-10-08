@@ -12,6 +12,11 @@
  *     a JSON array of BMP file paths, e.g.
  *       ["/PICS/SUNSET.BMP", "/LOGO.BMP", "/PICS/MOUNTAIN.BMP"]
  *     shown in exactly that order. Paths can point into subfolders.
+ *     A JSON object with a "playlist" member works too, so a card set
+ *     up for SDBitmapViewerDemo -- which keeps its own settings in the
+ *     same file -- plays here without being edited; everything beside
+ *     "playlist" is ignored. See parsePlaylist() for what is and is not
+ *     understood.
  *     (Extension is .JSN, not .JSON -- this sketch's SD library only
  *     supports 8.3 filenames, so a 4-character extension can't be
  *     opened at all; the file's content is still plain JSON.) See
@@ -53,6 +58,12 @@ static const uint8_t BMP_PATH_LEN = 28; // "/SUBFOLDER1/FILE.BMP"-sized -- kept
 static const uint8_t CHUNK_PIXELS = 32; // small on purpose: keeps RAM
                                          // usage safe on 2KB AVR boards
 static const char PLAYLIST_FILE[] = "/PLAYLIST.JSN";
+
+// The member this sketch reads when PLAYLIST_FILE holds a JSON object
+// rather than a bare array -- which is what SDBitmapViewerDemo writes,
+// since it keeps its own settings in the same file. Matching the name
+// means one card works with either sketch.
+static const char PLAYLIST_KEY[] = "playlist";
 
 ST7789  tft(D10, D7, D9);
 XPT2046 touch(D4, D3);
@@ -115,13 +126,51 @@ static void scanBmpFiles(void)
 	}
 }
 
-// Minimal, hand-rolled parser for PLAYLIST_FILE: reads a top-level
-// JSON array of quoted path strings straight off the SD card one
-// character at a time (no whole-file buffer, no library dependency --
-// keeps this safe on 2KB-RAM AVR boards). Only "\\" and "\"" escapes
-// are recognized; anything else after a backslash is taken literally.
-// Not a general JSON parser -- deliberately just enough for this
-// sketch's own array-of-strings format.
+// Steps past whitespace and returns the next meaningful character
+// without consuming it, or -1 at end of file. Used to tell a JSON member
+// name from a value: only a name is followed by a colon.
+static int peekNonSpace(File &f)
+{
+	while (f.available()) {
+		int c = f.peek();
+		if (c != ' ' && c != '\t' && c != '\r' && c != '\n') {
+			return c;
+		}
+		f.read();
+	}
+	return -1;
+}
+
+// Minimal, hand-rolled parser for PLAYLIST_FILE: walks the file one
+// character at a time, picking out quoted strings (no whole-file buffer,
+// no library dependency -- keeps this safe on 2KB-RAM AVR boards). Only
+// "\\" and "\"" escapes are recognized; anything else after a backslash
+// is taken literally.
+//
+// Not a general JSON parser. It handles the two shapes this library's
+// own examples write, in one pass over one open -- the bundled SD
+// library is not reliable about handing back the same path twice, so
+// looking for a member and then rewinding to read it is not an option:
+//
+//   ["/A.BMP", "/B.BMP"]                 a bare array: every string is
+//                                        a path, which is what this
+//                                        sketch has always written
+//
+//   { "playlist": ["/A.BMP"], ... }      an object, as written by
+//                                        SDBitmapViewerDemo, which
+//                                        keeps its own settings beside
+//                                        the list: only the "playlist"
+//                                        member is a path list here
+//
+// A string followed by a colon is a member name, so it is never stored,
+// and it decides whether the strings after it are ours. Until the first
+// such name is seen every string is taken, which is what makes a bare
+// array work without a special case. Order does not matter: whichever
+// member comes first, "playlist" claims the list when it arrives.
+//
+// An object with no "playlist" member leaves nothing collected, and the
+// caller falls back to scanning the directory -- the same as for a file
+// that will not parse at all.
 static bool parsePlaylist(void)
 {
 	File f = SD.open(PLAYLIST_FILE);
@@ -130,11 +179,13 @@ static bool parsePlaylist(void)
 	}
 
 	bmpCount = 0;
-	bool inString = false;
+	bool inString   = false;
+	bool sawName    = false; // any member name seen yet?
+	bool inPlaylist = false; // inside the "playlist" member?
 	char buf[BMP_PATH_LEN];
 	uint8_t len = 0;
 
-	while (f.available() && bmpCount < MAX_BMP_FILES) {
+	while (f.available()) {
 		char c = f.read();
 
 		if (!inString) {
@@ -150,7 +201,16 @@ static bool parsePlaylist(void)
 		} else if (c == '"') {
 			inString = false;
 			buf[len] = '\0';
-			if (len > 0) {
+
+			if (peekNonSpace(f) == ':') {
+				// A member name. Discard it, and let it say whether what
+				// follows belongs to us.
+				sawName    = true;
+				inPlaylist = (strcmp(buf, PLAYLIST_KEY) == 0);
+				if (inPlaylist) {
+					bmpCount = 0; // this member is the list, not anything before it
+				}
+			} else if (len > 0 && (!sawName || inPlaylist) && bmpCount < MAX_BMP_FILES) {
 				strncpy(bmpName[bmpCount], buf, BMP_PATH_LEN - 1);
 				bmpName[bmpCount][BMP_PATH_LEN - 1] = '\0';
 				bmpCount++;
@@ -201,18 +261,22 @@ static bool readLE32(File &f, uint32_t &v)
 
 // Re-walks the root directory via openNextFile() to (re-)open the
 // index'th BMP entry (same filter as scanBmpFiles()), leaving it open
-// in `out` on success. Deliberately not SD.open("/" + name): reopening
-// a file that way after it was already visited once via
-// openNextFile() reliably fails on this library/card combination even
-// though the name is correct and unchanged (confirmed on real
-// hardware) -- root cause not identified in the (quite old) bundled SD
-// library's internals, but walking via openNextFile() again, the same
-// way scanBmpFiles() itself successfully opens every entry, reliably
-// works, so that's what this uses instead of trusting the path-based
-// SD.open(). Only used for the directory-scan path -- playlist mode
-// opens files straight from their JSON-given path instead (see
-// showCurrentBmp()), since those names were never touched by
-// openNextFile() in the first place and so don't hit this bug.
+// in `out` on success. Only used for the directory-scan path --
+// playlist mode opens files straight from their JSON-given path (see
+// showCurrentBmp()).
+//
+// An earlier version of this comment blamed the bundled SD library for
+// failing to reopen a file by path once openNextFile() had visited it.
+// That was wrong. The real cause was stack: SDClass::open() stacks two
+// SdFile objects inside getParentDir(), returns a third by value, and
+// keeps two more in its own frame, so it only reaches its malloc()
+// about 150 bytes below its caller. Called from showCurrentBmp() on an
+// UNO R3 that overran the ~240 bytes left between the stack and .bss,
+// which on AVR corrupts the SD library's block cache silently -- so
+// both SD.open(path) and SD.open("/") handed back a closed File for a
+// name that was perfectly correct. Walking the directory needs less
+// stack than SDClass::open(), which is why it looked like a fix. See
+// drawBmp() for what actually freed the stack up.
 static bool openBmpByIndex(uint8_t index, File &out)
 {
 	File dir = SD.open("/");
@@ -242,7 +306,20 @@ static bool openBmpByIndex(uint8_t index, File &out)
 // so an SD read (its own SPI transaction on a different CS) never
 // gets interleaved with an open LCD one -- the two must not overlap
 // on a shared bus.
-static bool drawBmp(File &f, int16_t x0, int16_t y0)
+//
+// noinline is load-bearing on the UNO R3, not an optimisation hint.
+// This is a static function with one call site, so the compiler inlines
+// it into showCurrentBmp(), and then rgb[] and px[] below -- 160 bytes
+// -- sit in showCurrentBmp()'s frame from the moment it is entered,
+// including while it opens the file. That left ~240 bytes between the
+// stack and .bss, too little for SDClass::open()'s own deep frame, and
+// the open failed (see openBmpByIndex()). Keeping drawBmp() a real call
+// moves those 160 bytes to after the open instead: measured on real
+// hardware, 239 bytes of headroom at the open became 477. Making the
+// buffers static would NOT do it -- that moves them into .bss, which
+// raises the heap end by the same amount and leaves the gap unchanged
+// (measured: 243 -> 225, i.e. no gain).
+static bool __attribute__((noinline)) drawBmp(File &f, int16_t x0, int16_t y0)
 {
 	uint16_t sig;
 	uint32_t fileSize, reserved, dataOffset, headerSize;
