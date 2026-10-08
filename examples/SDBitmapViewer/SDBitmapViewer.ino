@@ -261,18 +261,22 @@ static bool readLE32(File &f, uint32_t &v)
 
 // Re-walks the root directory via openNextFile() to (re-)open the
 // index'th BMP entry (same filter as scanBmpFiles()), leaving it open
-// in `out` on success. Deliberately not SD.open("/" + name): reopening
-// a file that way after it was already visited once via
-// openNextFile() reliably fails on this library/card combination even
-// though the name is correct and unchanged (confirmed on real
-// hardware) -- root cause not identified in the (quite old) bundled SD
-// library's internals, but walking via openNextFile() again, the same
-// way scanBmpFiles() itself successfully opens every entry, reliably
-// works, so that's what this uses instead of trusting the path-based
-// SD.open(). Only used for the directory-scan path -- playlist mode
-// opens files straight from their JSON-given path instead (see
-// showCurrentBmp()), since those names were never touched by
-// openNextFile() in the first place and so don't hit this bug.
+// in `out` on success. Only used for the directory-scan path --
+// playlist mode opens files straight from their JSON-given path (see
+// showCurrentBmp()).
+//
+// An earlier version of this comment blamed the bundled SD library for
+// failing to reopen a file by path once openNextFile() had visited it.
+// That was wrong. The real cause was stack: SDClass::open() stacks two
+// SdFile objects inside getParentDir(), returns a third by value, and
+// keeps two more in its own frame, so it only reaches its malloc()
+// about 150 bytes below its caller. Called from showCurrentBmp() on an
+// UNO R3 that overran the ~240 bytes left between the stack and .bss,
+// which on AVR corrupts the SD library's block cache silently -- so
+// both SD.open(path) and SD.open("/") handed back a closed File for a
+// name that was perfectly correct. Walking the directory needs less
+// stack than SDClass::open(), which is why it looked like a fix. See
+// drawBmp() for what actually freed the stack up.
 static bool openBmpByIndex(uint8_t index, File &out)
 {
 	File dir = SD.open("/");
@@ -302,7 +306,20 @@ static bool openBmpByIndex(uint8_t index, File &out)
 // so an SD read (its own SPI transaction on a different CS) never
 // gets interleaved with an open LCD one -- the two must not overlap
 // on a shared bus.
-static bool drawBmp(File &f, int16_t x0, int16_t y0)
+//
+// noinline is load-bearing on the UNO R3, not an optimisation hint.
+// This is a static function with one call site, so the compiler inlines
+// it into showCurrentBmp(), and then rgb[] and px[] below -- 160 bytes
+// -- sit in showCurrentBmp()'s frame from the moment it is entered,
+// including while it opens the file. That left ~240 bytes between the
+// stack and .bss, too little for SDClass::open()'s own deep frame, and
+// the open failed (see openBmpByIndex()). Keeping drawBmp() a real call
+// moves those 160 bytes to after the open instead: measured on real
+// hardware, 239 bytes of headroom at the open became 477. Making the
+// buffers static would NOT do it -- that moves them into .bss, which
+// raises the heap end by the same amount and leaves the gap unchanged
+// (measured: 243 -> 225, i.e. no gain).
+static bool __attribute__((noinline)) drawBmp(File &f, int16_t x0, int16_t y0)
 {
 	uint16_t sig;
 	uint32_t fileSize, reserved, dataOffset, headerSize;
