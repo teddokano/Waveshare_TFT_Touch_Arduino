@@ -92,10 +92,21 @@ Sketch|Feature
 `GraphicsPrimitivesDemo`|Exercises every drawing primitive (fillRect/drawRect/lines/circles) and cycles through all four `setRotation()` orientations every few seconds -- a quick bring-up/visual-regression check, LCD only
 `SDBitmapViewerDemo`|The same idea taken further, on **FRDM-MCXA153 and FRDM-MCXN947 only**: tap/swipe/long-press navigation, the board's own SW2/SW3 buttons with click-counted jumps, a screen saver, directional wipes between pictures, and an SD-card log -- all configured from a single JSON file on the card. See [its own README](examples/SDBitmapViewerDemo/README.md); it stops with an `#error` on other boards, so the portable `SDBitmapViewer` above stays the one to start from
 `TouchCalibration`|Guided wizard: touch four on-screen crosshairs and it prints a ready-to-paste `setCalibration()` call, auto-detecting axis swap/inversion instead of TouchPaint's hardcoded guesses
-`Breakout`|A playable game, and one of the two **portrait** examples (240x320, `setRotation(0)`): bricks, score/level/lives, rising speed per level, LCD and touch only. Slide a finger anywhere to move the paddle -- the bottom 50px are left empty as a control band, so the paddle stays visible above the finger rather than under it. Worth reading for two things the panel forces on a game: the touch mapping is rotation 1's calibration turned 90 degrees with the display (`swapXY` drops, both axes invert -- derived in the sketch's `setup()`), and `handleTouch()` keeps the last known target so that the readings this panel drops while a finger slides cost smoothness instead of stopping the paddle
-`WhackAMole`|A tap-the-mole game, also **portrait**: twelve 80x71 holes, a 30-second clock, moles that stay up for less and less time, LCD and touch only. Picked to suit this panel rather than fight it -- a tap on a target far larger than a fingertip's 45-50px contact patch survives both the single-point resistive panel and the 30-50% of readings it drops while a finger moves, because the tap only has to be seen on one of the frames the finger is down. It also shows what can be done about the UNO R3's phantom touches: an all-zero SPI read maps to exactly (239, 319), so the bottom 8 rows are left outside the grid and any tap there is discarded -- a phantom becomes an empty tap instead of a free hit or an unasked-for new game. Missing costs nothing, which also stops a press whose readings flicker from scoring twice
 
-After installing the library: `File` -> `Examples` -> `Waveshare_TFT_Touch` -> pick a sketch
+#### Games
+
+These two are there to be played rather than read, so they sit in a
+subfolder of their own -- the IDE shows `examples/Games` as a submenu.
+Both run **portrait** (240x320, `setRotation(0)`), use the LCD and touch
+only, and carry the same hand-made 3x5 dot font, since the library has no
+text rendering of its own.
+
+Sketch|Feature
+---|---
+`Games/Breakout`|A playable game, and one of the two **portrait** examples (240x320, `setRotation(0)`): bricks, score/level/lives, rising speed per level, LCD and touch only. Slide a finger anywhere to move the paddle -- the bottom 50px are left empty as a control band, so the paddle stays visible above the finger rather than under it. Worth reading for two things the panel forces on a game: the touch mapping is rotation 1's calibration turned 90 degrees with the display (`swapXY` drops, both axes invert -- derived in the sketch's `setup()`), and `handleTouch()` keeps the last known target so that the readings this panel drops while a finger slides cost smoothness instead of stopping the paddle
+`Games/WhackAMole`|A tap-the-mole game, also **portrait**: twelve 80x71 holes, a 30-second clock, moles that stay up for less and less time, LCD and touch only. Picked to suit this panel rather than fight it -- a tap on a target far larger than a fingertip's 45-50px contact patch survives both the single-point resistive panel and the 30-50% of readings it drops while a finger moves, because the tap only has to be seen on one of the frames the finger is down. It also shows what can be done about the UNO R3's phantom touches: an all-zero SPI read maps to exactly (239, 319), so the bottom 8 rows are left outside the grid and any tap there is discarded -- a phantom becomes an empty tap instead of a free hit or an unasked-for new game. Missing costs nothing, which also stops a press whose readings flicker from scoring twice
+
+After installing the library: `File` -> `Examples` -> `Waveshare_TFT_Touch` -> pick a sketch (the games are under `Games`)
 
 ## Pin mapping
 
