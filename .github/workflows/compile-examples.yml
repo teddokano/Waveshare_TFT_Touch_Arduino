@@ -33,8 +33,8 @@ jobs:
               - examples/GraphicsPrimitivesDemo
               - examples/TouchCalibration
               - examples/SDBitmapViewer
-              - examples/Breakout
-              - examples/WhackAMole
+              - examples/Games/Breakout
+              - examples/Games/WhackAMole
 
           - name: "UNO R4 Minima (arduino:renesas_uno)"
             fqbn: "arduino:renesas_uno:minima"
@@ -51,8 +51,8 @@ jobs:
               - examples/GraphicsPrimitivesDemo
               - examples/TouchCalibration
               - examples/SDBitmapViewer
-              - examples/Breakout
-              - examples/WhackAMole
+              - examples/Games/Breakout
+              - examples/Games/WhackAMole
 
           - name: "FRDM-MCXA153 (nxp:mcx / mcx-arduino-core)"
             fqbn: "nxp:mcx:frdm_mcxa153"
