@@ -541,15 +541,13 @@ static bool handleTouch(void)
 	}
 
 	// Carry on toward the last known target even on a frame the panel
-	// gave nothing. This panel drops a sizeable share of readings while
-	// a finger is sliding -- measured at 30-50% of polls on real
-	// hardware, with the pressure channels reading as though nothing
-	// were touching at all -- and returning early on each of those left
-	// the paddle standing still for that frame, which is what made it
-	// stutter rather than follow. Remembering the target turns a
-	// dropped sample into lost smoothness instead of lost motion; only
-	// a sustained loss parks the paddle. It does not make the panel
-	// read any better, it just stops one bad sample from being visible.
+	// gave nothing. A resistive panel does not answer every poll while
+	// a finger is sliding, and returning early on each of those frames
+	// left the paddle standing still for one, which showed as stutter
+	// rather than following. Remembering the target turns a missed
+	// sample into lost smoothness instead of lost motion; only a
+	// sustained loss parks the paddle. It does not make the panel read
+	// any better, it just stops one missed sample from being visible.
 	if (!paddleTargetValid)
 		return got;
 

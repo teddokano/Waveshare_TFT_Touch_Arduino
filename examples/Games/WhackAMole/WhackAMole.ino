@@ -18,12 +18,11 @@
  *   - Missing costs nothing, so tap away.
  *
  * Why this game suits this panel:
- *   The touch panel is resistive and single-point, and it drops a sizeable
- *   share of its readings while a finger is moving -- measured at 30-50%
- *   of polls on real hardware. A game made of taps on big targets is
- *   nearly immune to both: a hole is 80x71 pixels, far larger than a
- *   fingertip's 45-50px contact patch, and a tap only has to be seen on
- *   one of the frames the finger is down.
+ *   The touch panel is resistive and single-point. A game made of taps
+ *   on big targets asks nothing of either: a hole is 80x71 pixels, far
+ *   larger than a fingertip's 45-50px contact patch, so there is no
+ *   aiming to it, and a tap only has to be seen on one of the frames the
+ *   finger is down, so nothing has to track a finger as it slides.
  *
  * Implementation notes:
  *   - The library has no text rendering, so this sketch carries its own
@@ -62,14 +61,18 @@ static const int16_t CELL_W = SCREEN_W / GRID_COLS; // 80
 static const int16_t GRID_TOP = 28;
 
 // The bottom rows of pixels are deliberately left outside the grid, and
-// every tap landing there is thrown away. On the UNO R3 this panel
-// occasionally answers an SPI read with all zeroes, which the driver
-// cannot tell from a real touch: the pressure figure of merit comes out
-// at its maximum and the coordinates at raw (0,0), which this sketch's
-// calibration maps to exactly (239, 319) -- the bottom-right pixel.
-// Keeping the grid clear of that corner turns those phantom touches into
-// taps on dead space instead of free hits, and stops them from starting
-// a game by themselves on the title screen. It costs 8 of 320 rows.
+// every tap landing there is thrown away, so the bottom row of holes is
+// not pressed up against the panel's own edge -- the one place a
+// resistive panel reads a position least reliably. It costs 8 of 320
+// rows.
+//
+// It was added for a different reason: a shield that answered some SPI
+// reads with all zeroes, which this calibration maps to exactly
+// (239, 319), so the driver reported a maximum-pressure touch on the
+// bottom-right pixel and the grid had to be kept clear of it. That
+// shield turned out to be defective and a good one does none of it, so
+// the strip is no longer holding anything up. Kept because this is the
+// layout that was played and tested.
 static const int16_t DEAD_H = 8;
 
 static const int16_t CELL_H = (SCREEN_H - DEAD_H - GRID_TOP) / GRID_ROWS; // 71
@@ -372,9 +375,7 @@ static void popMole(uint32_t now, uint32_t elapsed)
 }
 
 // A tap at (tx, ty). Hitting a mole scores; everything else is ignored.
-// A miss costs nothing on purpose: this panel can emit a stray touch of
-// its own (see the note on the dead strip above), and nothing the player
-// did not do should ever be able to take points away. It also means a
+// A miss costs nothing on purpose, which is kinder and also useful: a
 // press whose readings flicker, and so looks like two taps, cannot score
 // twice -- the second one lands on a cell that is already CELL_BONKED.
 static void handleTap(uint16_t tx, uint16_t ty, uint32_t now)
